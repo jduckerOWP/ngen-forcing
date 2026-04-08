@@ -20,10 +20,14 @@ def create_mesh(cfg: ConfigOptions):
     # Set the mesh file name based on the hydrofabric file
     hyfab_name = cfg.geopackage
     mesh_outPath = cfg.geogrid
+    try:
+        parquet_data = cfg.parquet
+    except:
+        parquet_data = None
 
     # Check if the mesh file already exists and skip conversion if it does
     if not os.path.exists(mesh_outPath):
-        convert_hyfab_to_esmf(hyfab_gpkg=hyfab_name, esmf_mesh_output=mesh_outPath)
+        convert_hyfab_to_esmf(hyfab_gpkg=hyfab_name, esmf_mesh_output=mesh_outPath,parquet=parquet_data)
     else:
         print(f"ESMF mesh file already exists at {mesh_outPath}, skipping conversion.")
 

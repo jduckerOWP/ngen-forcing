@@ -33,7 +33,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
     ens_number = cfg.cfsv2EnsMember
     ana_flag = cfg.ana_flag
     look_back = cfg.look_back
-    extraction_scriptPath = "/ngen-app/ngen-forcing/Forcing_Extraction_Scripts"
+    extraction_scriptPath = "./Forcing_Extraction_Scripts"
 
     # Set mapping between InputForcings codes and forcing extraction scripts
     forcing_src = {

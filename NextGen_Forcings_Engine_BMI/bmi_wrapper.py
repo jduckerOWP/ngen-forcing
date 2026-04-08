@@ -55,7 +55,8 @@ def execute(forcing_config_input: str, config_input: str = None, output_path: st
 
     # Wrap config dict into simplenamespace to match esmf creation ConfigOptions format
     esmf_cfg = SimpleNamespace(geopackage=forcing_config['Geopackage'],
-                               geogrid=forcing_config['GeogridIn'])
+                               geogrid=forcing_config['GeogridIn'],
+                               parquet=config['global']['parquet_path'])
 
     # Wrap config dict into simplenamespace to match forcing extraction ConfigOptions format
     extract_cfg = SimpleNamespace(b_date_proc=datetime.strptime(forcing_config['RefcstBDateProc'], "%Y%m%d%H%M"),
@@ -74,12 +75,8 @@ def execute(forcing_config_input: str, config_input: str = None, output_path: st
     # Extract forcing
     forcing_extraction.retrieve_forcing(extract_cfg)
 
-    # Set the mesh file name based on the hydrofabric file
-    base_geo_name = os.path.splitext(os.path.basename(forcing_config['Geopackage']))[0]
-    mesh_fileName = f"{base_geo_name}_ESMF_Mesh.nc"
-
     # Extract paths and environment names from the configuration file
-    mesh_outPath = os.path.join(config['global']['mesh_out_base_path'], mesh_fileName)
+    mesh_outPath = forcing_config['GeogridIn']
     bmi_scriptPath = config['global']['bmi_script_path']
 
     # Get parameters from the forcing engine config file
