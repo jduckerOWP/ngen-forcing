@@ -42,18 +42,18 @@ import numpy as np
 import pandas as pd
 from pyproj import Transformer
 
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core import (
+from . import (
     err_handler,
     ioMod,
     timeInterpMod,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
+from .config import (
     ConfigOptions,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.geoMod import (
+from .geoMod import (
     GeoMetaWrfHydro,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import MpiConfig
+from .parallel import MpiConfig
 from nextgen_forcings_ewts import MODULE_NAME
 
 LOG = logging.getLogger(MODULE_NAME)

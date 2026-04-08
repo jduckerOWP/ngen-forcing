@@ -8,13 +8,13 @@ import logging
 
 import numpy as np
 
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
+from .config import (
     ConfigOptions,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.geoMod import (
+from .geoMod import (
     GeoMetaWrfHydro,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import MpiConfig
+from .parallel import MpiConfig
 from nextgen_forcings_ewts import MODULE_NAME
 
 from . import regrid, time_handling, timeInterpMod

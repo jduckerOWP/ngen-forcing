@@ -7,10 +7,10 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.err_handler import (
+from .err_handler import (
     err_out_screen,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.time_handling import (
+from .time_handling import (
     calculate_lookback_window,
 )
 from nextgen_forcings_ewts import MODULE_NAME
@@ -1305,10 +1305,10 @@ class ConfigOptions:
                 )
 
         if (
-            [1] in self.q2dDownscaleOpt
-            or [1] in self.swDownscaleOpt
-            or [1] in self.psfcDownscaleOpt
-            or [1, 2] in self.t2dDownscaleOpt
+            set([1]).intersection(self.q2dDownscaleOpt)
+            or set([1]).intersection(self.swDownscaleOpt)
+            or set([1]).intersection(self.psfcDownscaleOpt)
+            or set([1,2]).intersection(self.t2dDownscaleOpt)
         ):
             # Process the geogrid information for downscaling
             try:

@@ -20,10 +20,10 @@ from mpi4py.futures import MPICommExecutor
 from pyproj import CRS, Transformer
 from shapely import box, transform
 
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
+from .core.config import (
     ConfigOptions,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import MpiConfig
+from .core.parallel import MpiConfig
 from nextgen_forcings_ewts import MODULE_NAME
 
 LOG = logging.getLogger(MODULE_NAME)

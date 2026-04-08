@@ -7,22 +7,22 @@ from time import time
 import numpy as np
 import pandas as pd
 
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core import (
+from .core import (
     bias_correction,
     disaggregateMod,
     downscale,
     err_handler,
     layeringMod,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.config import (
+from .core.config import (
     ConfigOptions,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.geoMod import (
+from .core.geoMod import (
     GeoMetaWrfHydro,
 )
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.ioMod import OutputObj
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.core.parallel import MpiConfig
-from NextGen_Forcings_Engine_BMI.NextGen_Forcings_Engine.historical_forcing import (
+from .core.ioMod import OutputObj
+from .core.parallel import MpiConfig
+from .historical_forcing import (
     AORCAlaskaProcessor,
     AORCConusProcessor,
     NWMV3ConusProcessor,

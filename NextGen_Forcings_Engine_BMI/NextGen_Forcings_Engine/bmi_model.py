@@ -23,7 +23,7 @@ from bmipy import Bmi
 # Import MPI Python module
 from mpi4py import MPI
 
-from NextGen_Forcings_Engine_BMI import esmf_creation, forcing_extraction
+import esmf_creation, forcing_extraction
 
 from .bmi_grid import Grid, GridType
 from .core import (
@@ -53,8 +53,25 @@ from typing import Any
 
 from numpy.typing import NDArray
 
+def _preprocess(v, separator, ignorecase):
+    if ignorecase: v = v.lower()
+    return [int(x) if x.isdigit() else [int(y) if y.isdigit() else y for y in
+        re.findall(r"\d+|[a-zA-Z]+", x)] for x in v.split(separator)]
+
+def version_compare(a, b, separator = '.', ignorecase = True):
+    a = _preprocess(a, separator, ignorecase)
+    b = _preprocess(b, separator, ignorecase)
+    try:
+        return (a > b) - (a < b)
+    except:
+        return False
+
+# ESMF.Version_compare has been discontinued starting in v8.9.0
+# so we therefore had added the code manually to still account
+# for ESMF version control management of keeping MPI
+
 # If less than 0, then ESMF.__version__ is greater than 8.7.0
-if ESMF.version_compare("8.7.0", ESMF.__version__) < 0:
+if (version_compare('8.7.0', ESMF.__version__) < 0):
     manager = ESMF.api.esmpymanager.Manager(endFlag=ESMF.constants.EndAction.KEEP_MPI)
 
 import logging
@@ -1048,8 +1065,8 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                         and filename[0:23] != "NextGen_Forcings_Engine"
                     ):
                         os.remove(file_path)
-                    elif os.path.isdir(file_path):
-                        os.rmdir(file_path)
+                    #elif os.path.isdir(file_path):
+                    #    os.rmdir(file_path)
 
     # -------------------------------------------------------------------
     # -------------------------------------------------------------------
