@@ -3315,13 +3315,47 @@ def cfsv2_nldas_nwm_bias_correct(input_forcings, config_options, mpi_config, for
         err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
-    try:
-        input_forcings.final_forcings[
-            input_forcings.input_map_output[force_num], :, :
-        ] = input_forcings.esmf_field_out.data
-    except NumpyExceptions as npe:
-        config_options.errMsg = "Unable to extract ESMF field data for CFSv2: " + str(
-            npe
-        )
-        err_handler.log_critical(config_options, mpi_config)
-    err_handler.check_program_status(config_options, mpi_config)
+    if config_options.grid_type == "gridded":
+        try:
+            input_forcings.final_forcings[
+                input_forcings.input_map_output[force_num], :, :
+            ] = input_forcings.esmf_field_out.data
+        except NumpyExceptions as npe:
+            config_options.errMsg = "Unable to extract gridded ESMF field data for CFSv2: " + str(
+                npe
+            )
+            err_handler.log_critical(config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
+    elif config_options.grid_type == "unstructured":
+        try:
+            input_forcings.final_forcings[
+                input_forcings.input_map_output[force_num], :
+            ] = input_forcings.esmf_field_out.data
+        except NumpyExceptions as npe:
+            config_options.errMsg = "Unable to extract mesh node ESMF field data for CFSv2: " + str(
+                npe
+            )
+            err_handler.log_critical(config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
+
+        try:
+            input_forcings.final_forcings_elem[
+                input_forcings.input_map_output[force_num], :
+            ] = input_forcings.esmf_field_out_elem.data
+        except NumpyExceptions as npe:
+            config_options.errMsg = "Unable to extract mesh element ESMF field data for CFSv2: " + str(
+                npe
+            )
+            err_handler.log_critical(config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
+    elif config_options.grid_type == "hydrofabric":
+        try:
+            input_forcings.final_forcings[
+                input_forcings.input_map_output[force_num], :
+            ] = input_forcings.esmf_field_out.data
+        except NumpyExceptions as npe:
+            config_options.errMsg = "Unable to extract mesh element ESMF field data for CFSv2: " + str(
+                npe
+            )
+            err_handler.log_critical(config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
