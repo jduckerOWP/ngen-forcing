@@ -330,25 +330,38 @@ class OutputObj:
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
 
-                # Create a time variable
-                try:
-                    self.idOut.createVariable("Time", "double", "time")
-                except Exception as e:
-                    ConfigOptions.errMsg = (
-                        f"Unable to create time variable in: {self.outPath} - {e}"
-                    )
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
+                if ConfigOptions.project == "noaa_owp":
+                    # Create a time variable
+                    try:
+                        self.idOut.createVariable('Time', 'double', ('catchment-id','time'))
+                    except Exception as e:
+                        ConfigOptions.errMsg = f"Unable to create time variable in: {self.outPath} - {e}"
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
 
-                # Set attributes for the time variable
-                try:
-                    self.idOut.variables[
-                        "Time"
-                    ].units = "minutes since 1970-01-01 00:00:00 UTC"
-                except Exception as e:
-                    ConfigOptions.errMsg = f"Unable to create time units attribute in: {self.outPath} - {e}"
-                    err_handler.log_critical(ConfigOptions, MpiConfig)
-                    break
+                    # Set attributes for the time variable
+                    try:
+                        self.idOut.variables['Time'].units = "minutes"
+                    except Exception as e:
+                        ConfigOptions.errMsg = f"Unable to create time units attribute in: {self.outPath} - {e}"
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+                else:
+                    # Create a time variable
+                    try:
+                        self.idOut.createVariable('Time', 'double', 'time')
+                    except Exception as e:
+                        ConfigOptions.errMsg = f"Unable to create time variable in: {self.outPath} - {e}"
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
+
+                    # Set attributes for the time variable
+                    try:
+                        self.idOut.variables['Time'].units = "minutes since 1970-01-01 00:00:00 UTC"
+                    except Exception as e:
+                        ConfigOptions.errMsg = f"Unable to create time units attribute in: {self.outPath} - {e}"
+                        err_handler.log_critical(ConfigOptions, MpiConfig)
+                        break
 
                 try:
                     self.idOut.variables["Time"].standard_name = "time"
@@ -440,6 +453,7 @@ class OutputObj:
                         ConfigOptions.errMsg = f"Unable to place y coordinate values into output variable for output file: {self.outPath} - {e}"
                         err_handler.log_critical(ConfigOptions, MpiConfig)
                         break
+
 
                     try:
                         self.idOut.createVariable("crs", "S1")
@@ -1038,6 +1052,15 @@ class OutputObj:
                             idOut.variables[varTmp][
                                 int(ConfigOptions.bmi_time_index), :, :
                             ] = dataOutTmp
+                        elif ConfigOptions.grid_type == "hydrofabric":
+                            if ConfigOptions.project == "noaa_owp":
+                                idOut.variables[varTmp][
+                                        :, int(ConfigOptions.bmi_time_index)
+                                ] = dataOutTmp
+                            elif ConfigOptions.project == "ngwpc":
+                                idOut.variables[varTmp][
+                                        int(ConfigOptions.bmi_time_index), :
+                                ] = dataOutTmp
                         else:
                             idOut.variables[varTmp][
                                 int(ConfigOptions.bmi_time_index), :

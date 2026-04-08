@@ -144,6 +144,7 @@ class ConfigOptions:
         self.nwm_geogrid = None
         self.geogrid = geogrid_arg
         self.geopackage = None
+        self.project = None
 
     def validate_config(self, cfg_bmi: dict) -> None:
         """Validate in options from the configuration file and check that proper options were provided."""
@@ -162,6 +163,19 @@ class ConfigOptions:
                     "Unable to locate RefcstBDateProc under Logistics section in configuration file.",
                     e,
                 )
+
+        # Look to see if the project is set in configuration file, otherwise
+        # default the project to noaa_owp
+        if self.project is None:
+            try:
+                self.project = cfg_bmi.get(
+                    "project", None
+                )  # Default to noaa_owp if not found
+                if self.project is None:
+                    self.project = 'noaa_owp'
+            except:
+                # Default the project to noaa_owp
+                self.project = 'noaa_owp'
 
         # Ensure geopackage is set; if not, read from the configuration file
         if self.geopackage is None:
