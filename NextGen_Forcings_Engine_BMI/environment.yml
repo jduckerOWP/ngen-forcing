@@ -17,4 +17,10 @@ dependencies:
   - zarr
   - s3fs
   - xarray
+  - pyyaml
   - pyproj
+  - shapely
+  - geopandas
+  - beautifulsoup4
+  - python-dotenv
+  - matplotlib
