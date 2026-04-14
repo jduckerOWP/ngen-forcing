@@ -34,9 +34,13 @@ class RAPDownloader(ForecastDownloader):
         URL format: https://.../rap.YYYYMMDD/rap.tHHz.awp130bgrbfXX.grib2
         """
         fhr_str = str(forecast_hour).zfill(2)
-        filename = f"rap.t{d_start.strftime('%H')}z.awp130bgrbf{fhr_str}.grib2"
-        url = os.path.join(self.base_url, f"rap.{d_start.strftime('%Y%m%d')}", filename)
-        return url, filename
+        extensions = ["pgrb","bgrb"]
+        results = []
+        for ext in extensions:
+            filename = f"rap.t{d_start.strftime('%H')}z.awp130{ext}f{fhr_str}.grib2"
+            url = os.path.join(self.base_url, f"rap.{d_start.strftime('%Y%m%d')}", filename)
+            results.append((url,filename))
+        return results
 
 
 if __name__ == "__main__":

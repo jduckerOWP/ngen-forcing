@@ -141,6 +141,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
             cleanback_hours=0,
             lagback_hours=0,
             ens_number=int(ens_number) if ens_number not in ("", None) else None,
+            input_forcing=input_forcings[i],
         )
 
         # Run the download

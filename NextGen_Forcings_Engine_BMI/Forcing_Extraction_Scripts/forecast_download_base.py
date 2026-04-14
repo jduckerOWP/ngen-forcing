@@ -40,7 +40,7 @@ class ForecastDownloader(ABC):
     default_cleanback = 240
     default_lagback = 6
 
-    def __init__(self, out_dir, start_time, lookback_hours, cleanback_hours, lagback_hours, ens_number):
+    def __init__(self, out_dir, start_time, lookback_hours, cleanback_hours, lagback_hours, ens_number, input_forcing):
         """
         Initialize downloader with common configuration.
 
@@ -49,6 +49,8 @@ class ForecastDownloader(ABC):
         :param lookback_hours: How many hours back to fetch forecasts
         :param cleanback_hours: How far back to clean old files
         :param lagback_hours: How many hours to lag before starting to fetch
+        :param ens_number: The ensemble number for a given operational model
+        :param input_forcing: The integer based value of a specific operational model in forcing engine
         """
         if lookback_hours <= lagback_hours:
             raise ValueError(
@@ -62,6 +64,7 @@ class ForecastDownloader(ABC):
         self.cleanback_hours = cleanback_hours
         self.lagback_hours = lagback_hours
         self.ens_number = ens_number
+        self.input_forcing = input_forcing
 
         # Current hour, rounded to the top of the hour in UTC
         self.d_now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
@@ -106,6 +109,7 @@ class ForecastDownloader(ABC):
         parser.add_argument('--cleanBackHours', type=int, default=cls.default_cleanback)
         parser.add_argument('--lagBackHours', type=int, default=cls.default_lagback)
         parser.add_argument('--ensNumber', type=int, default=None)
+        parser.add_argument('--inputforcing', type=int)
         args = parser.parse_args()
 
         print(f"{cls.__name__} args:", vars(args))
@@ -116,7 +120,8 @@ class ForecastDownloader(ABC):
             lookback_hours=args.lookBackHours,
             cleanback_hours=args.cleanBackHours,
             lagback_hours=args.lagBackHours,
-            ens_number=args.ensNumber
+            ens_number=args.ensNumber,
+            input_forcing=args.inputforcing
         )
 
     def run(self):
@@ -270,18 +275,35 @@ class ForecastDownloader(ABC):
             self.pre_download_hook(d_start)
 
             targets = self.get_download_targets(d_start)
-            for target in targets:
-                url, filename = self.build_file_url_and_name(d_start, target, self.ens_number)
-                out_path = os.path.join(output_dir, filename)
 
-                LOG.info(f"Looking for file {out_path}")
-                if os.path.isfile(out_path):
-                    LOG.info(f"Skipping existing: {out_path}")
-                    continue
+            # Flag for special RAP case where we need multiple file types
+            if self.input_forcing == 6:
+                for target in targets:
+                    file_list = self.build_file_url_and_name(d_start, target, self.ens_number)
+                    for url, filename in file_list:
+                        out_path = os.path.join(output_dir, filename)
 
-                self._download_file(url, out_path)
+                        LOG.info(f"Looking for file {out_path}")
+                        if os.path.isfile(out_path):
+                            LOG.info(f"Skipping existing: {out_path}")
+                            continue
 
-            self.post_download_hook(d_start)
+                        self._download_file(url, out_path)
+
+                self.post_download_hook(d_start)
+            else:
+                for target in targets:
+                    url, filename = self.build_file_url_and_name(d_start, target, self.ens_number)
+                    out_path = os.path.join(output_dir, filename)
+
+                    LOG.info(f"Looking for file {out_path}")
+                    if os.path.isfile(out_path):
+                        LOG.info(f"Skipping existing: {out_path}")
+                        continue
+
+                    self._download_file(url, out_path)
+
+                self.post_download_hook(d_start)
 
     # noinspection PyMethodMayBeStatic
     def _download_file(self, url, out_path):
