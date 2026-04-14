@@ -1516,7 +1516,7 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
     # First find the current RAP forecast cycle that we are using.
     current_rap_cycle = config_options.current_fcst_cycle - datetime.timedelta(
         seconds=(cycle_offset + input_forcings.userCycleOffset) * 3600.0)
-    )
+
     if (
         current_rap_cycle.hour == 3
         or current_rap_cycle.hour == 9

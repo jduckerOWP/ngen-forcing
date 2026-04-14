@@ -3240,7 +3240,7 @@ def regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con
                 err_handler.check_program_status(config_options, mpi_config)
 
                 try:
-                    input_forcings.regridded_forcings2[input_forcings.input_map_outpuinput_forcings.esmf_field_out.data[np.isnan(input_forcings.esmf_field_out.data)] = -50t[force_count], :, :] = \
+                    input_forcings.regridded_forcings2[input_forcings.input_map_output[force_count], :, :] = \
                         input_forcings.esmf_field_out.data
                 except (ValueError, KeyError, AttributeError) as err:
                     config_options.errMsg = "Unable to place RAP ESMF data into local gridded array: " + str(err)
@@ -10164,13 +10164,13 @@ def regrid_mrms_precip_flag(
         err_handler.check_program_status(config_options, mpi_config)
 
     # Set any missing data or pixel cells outside the input domain to use temperature partitioning
-    try:
-        supplemental_precip.esmf_field_out_elem.data[
-            np.where(supplemental_precip.regridded_mask_elem == 0)
-        ] = config_options.globalNdv
-        supplemental_precip.esmf_field_out_elem.data[
-            np.isnan(supplemental_precip.esmf_field_out_elem.data)
-        ] = config_options.globalNdv
+        try:
+            supplemental_precip.esmf_field_out_elem.data[
+                np.where(supplemental_precip.regridded_mask_elem == 0)
+            ] = config_options.globalNdv
+            supplemental_precip.esmf_field_out_elem.data[
+                np.isnan(supplemental_precip.esmf_field_out_elem.data)
+            ] = config_options.globalNdv
         except (ValueError, ArithmeticError) as npe:
             config_options.errMsg = (
                 "Unable to run mask search on MRMS PrecipFlag: " + str(npe)

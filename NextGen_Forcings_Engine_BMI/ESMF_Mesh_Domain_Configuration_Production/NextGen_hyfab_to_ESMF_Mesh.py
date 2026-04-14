@@ -1,4 +1,5 @@
 import geopandas as gpd
+from shapely.ops import orient
 import netCDF4
 import numpy as np
 import pandas as pd
@@ -51,7 +52,7 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     hyfab = hyfab.sort_values(by=['element_id']).reset_index(drop=True)
 
     # Flag to see if user specified the hydrofabric parquet file for either VPU, subset, of CONUS
-    if parquet is not None:
+    if parquet is not None and os.path.isfile(parquet):
 
         # Open hydrofabric v2 parquet file containing the forcing
         # metadata that highlights catchment characteristics that
@@ -81,27 +82,27 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
 
     # Array for describing number of nodes per element
     element_num_nodes = np.empty(element_count, dtype=np.int32)
-    
+
+    #Initialize the total number of nodes variable
+    total_num_nodes = 0
+
     # Sanitized geometry list to ensure ESMF Mesh compliance
     # with the given hydrofabric
     sanitized_geoms = []
 
     for i in range(element_count):
-        # Extract geometry and element id for each element
+        # Extract geometry for each element
         geom = hyfab.geometry[i]
-        phys_id = hyfab.element_id[i]
-        
+    
         # If the catchment consists of multiple disconnected parts, keep only the
         # largest contiguous polygon to ensure a valid single-part ESMF element.
         if geom.geom_type == "MultiPolygon":
-            fix_stats["multipolygon"].append(phys_id)
             geom = max(geom.geoms, key=lambda a: a.area)
         
         # Check for self-intersecting geometries (e.g., bowties) 
         # and apply a zero-buffer fix to re-compute valid topology.
         if not geom.is_valid:
             geom = geom.buffer(0)
-            fix_stats["self_intersection"].append(phys_id)
             if geom.geom_type == "MultiPolygon":
                 geom = max(geom.geoms, key=lambda a: a.area)
 
@@ -109,7 +110,6 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
         # This ensures consistent surface normals and positive area calculations,
         # preventing triangulation failures during ESMF area-weighted regridding.
         if not geom.exterior.is_ccw:
-            fix_stats["clockwise"].append(phys_id)
             geom = orient(geom, sign=1.0)
 
 
@@ -189,7 +189,7 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
 
 
     # Flag to whether include hydrofabric metadata if parquet file was specified
-    if parquet is not None:
+    if parquet is not None and os.path.isfile(parquet):
         hgt_elem_var = nc.createVariable("Element_Elevation", "f8", ("elementCount"))
         hgt_elem_var.long_name = "Catchment height above sea level"
         hgt_elem_var.units = "meters"
