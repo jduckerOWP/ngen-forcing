@@ -15,37 +15,38 @@ def no_interpolation(input_forcings, ConfigOptions, MpiConfig):
     :param MpiConfig:
     :return:
     """
-    if ConfigOptions.grid_type == "gridded":
-        # Check to make sure we have valid grids.
-        if input_forcings.regridded_forcings2 is None:
-            input_forcings.final_forcings[:, :, :] = ConfigOptions.globalNdv
-        else:
-            input_forcings.final_forcings[:, :, :] = input_forcings.regridded_forcings2[
-                :, :, :
-            ]
-    elif ConfigOptions.grid_type == "unstructured":
-        # Check to make sure we have valid grids.
-        if input_forcings.regridded_forcings2 is None:
-            input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
-        else:
-            input_forcings.final_forcings[:, :] = input_forcings.regridded_forcings2[
-                :, :
-            ]
-        # Check to make sure we have valid grids for elements.
-        if input_forcings.regridded_forcings2_elem is None:
-            input_forcings.final_forcings_elem[:, :] = ConfigOptions.globalNdv
-        else:
-            input_forcings.final_forcings_elem[:, :] = (
-                input_forcings.regridded_forcings2_elem[:, :]
-            )
-    elif ConfigOptions.grid_type == "hydrofabric":
-        # Check to make sure we have valid grids.
-        if input_forcings.regridded_forcings2 is None:
-            input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
-        else:
-            input_forcings.final_forcings[:, :] = input_forcings.regridded_forcings2[
-                :, :
-            ]
+    with np.errstate(invalid='ignore'):
+        if ConfigOptions.grid_type == "gridded":
+            # Check to make sure we have valid grids.
+            if input_forcings.regridded_forcings2 is None:
+                input_forcings.final_forcings[:, :, :] = ConfigOptions.globalNdv
+            else:
+                input_forcings.final_forcings[:, :, :] = input_forcings.regridded_forcings2[
+                    :, :, :
+                ]
+        elif ConfigOptions.grid_type == "unstructured":
+            # Check to make sure we have valid grids.
+            if input_forcings.regridded_forcings2 is None:
+                input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
+            else:
+                input_forcings.final_forcings[:, :] = input_forcings.regridded_forcings2[
+                    :, :
+                ]
+            # Check to make sure we have valid grids for elements.
+            if input_forcings.regridded_forcings2_elem is None:
+                input_forcings.final_forcings_elem[:, :] = ConfigOptions.globalNdv
+            else:
+                input_forcings.final_forcings_elem[:, :] = (
+                    input_forcings.regridded_forcings2_elem[:, :]
+                )
+        elif ConfigOptions.grid_type == "hydrofabric":
+            # Check to make sure we have valid grids.
+            if input_forcings.regridded_forcings2 is None:
+                input_forcings.final_forcings[:, :] = ConfigOptions.globalNdv
+            else:
+                input_forcings.final_forcings[:, :] = input_forcings.regridded_forcings2[
+                    :, :
+                ]
 
 
 def no_interpolation_supp_pcp(supplemental_precip, ConfigOptions, MpiConfig):
@@ -59,38 +60,38 @@ def no_interpolation_supp_pcp(supplemental_precip, ConfigOptions, MpiConfig):
     :param MpiConfig:
     :return:
     """
-    if ConfigOptions.grid_type == "gridded":
-        if supplemental_precip.regridded_precip2 is not None:
-            supplemental_precip.final_supp_precip[:, :] = (
-                supplemental_precip.regridded_precip2[:, :]
-            )
-        else:
-            # We have missing files.
-            supplemental_precip.final_supp_precip[:, :] = ConfigOptions.globalNdv
-    elif ConfigOptions.grid_type == "unstructured":
-        if supplemental_precip.regridded_precip2 is not None:
-            supplemental_precip.final_supp_precip[:] = (
-                supplemental_precip.regridded_precip2[:]
-            )
-        else:
-            # We have missing files.
-            supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
-        if supplemental_precip.regridded_precip2_elem is not None:
-            supplemental_precip.final_supp_precip_elem[:] = (
-                supplemental_precip.regridded_precip2_elem[:]
-            )
-        else:
-            # We have missing files.
-            supplemental_precip.final_supp_precip_elem[:] = ConfigOptions.globalNdv
-    elif ConfigOptions.grid_type == "hydrofabric":
-        if supplemental_precip.regridded_precip2 is not None:
-            supplemental_precip.final_supp_precip[:] = (
-                supplemental_precip.regridded_precip2[:]
-            )
-        else:
-            # We have missing files.
-            supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
-
+    with np.errstate(invalid='ignore'): 
+        if ConfigOptions.grid_type == "gridded":
+            if supplemental_precip.regridded_precip2 is not None:
+                supplemental_precip.final_supp_precip[:, :] = (
+                    supplemental_precip.regridded_precip2[:, :]
+                )
+            else:
+                # We have missing files.
+                supplemental_precip.final_supp_precip[:, :] = ConfigOptions.globalNdv
+        elif ConfigOptions.grid_type == "unstructured":
+            if supplemental_precip.regridded_precip2 is not None:
+                supplemental_precip.final_supp_precip[:] = (
+                    supplemental_precip.regridded_precip2[:]
+                )
+            else:
+                # We have missing files.
+                supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
+            if supplemental_precip.regridded_precip2_elem is not None:
+                supplemental_precip.final_supp_precip_elem[:] = (
+                    supplemental_precip.regridded_precip2_elem[:]
+                )
+            else:
+                # We have missing files.
+                supplemental_precip.final_supp_precip_elem[:] = ConfigOptions.globalNdv
+        elif ConfigOptions.grid_type == "hydrofabric":
+            if supplemental_precip.regridded_precip2 is not None:
+                supplemental_precip.final_supp_precip[:] = (
+                    supplemental_precip.regridded_precip2[:]
+                )
+            else:
+                # We have missing files.
+                supplemental_precip.final_supp_precip[:] = ConfigOptions.globalNdv
 
 def nearest_neighbor(input_forcings, ConfigOptions, MpiConfig):
     """Nearest neighbor temporal interpolation.

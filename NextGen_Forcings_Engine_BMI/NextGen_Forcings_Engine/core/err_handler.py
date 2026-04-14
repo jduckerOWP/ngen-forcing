@@ -423,7 +423,7 @@ def check_forcing_bounds(ConfigOptions, input_forcings, MpiConfig):
         "Q2D": [5, -100.0, 100.0],
         "PSFC": [6, 0.0, 2000000.0],
         "SWDOWN": [7, 0.0, 5000.0],
-        "LQFRAC": [8, 0, 1],
+        "LQFRAC": [8, -50, 1],
     }
     fvars = [
         "U2D",

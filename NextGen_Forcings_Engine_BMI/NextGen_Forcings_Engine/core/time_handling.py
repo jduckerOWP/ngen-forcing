@@ -884,7 +884,7 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
     # Fortunately, HRRR data is straightforward compared to GFS in terms of precip values, etc.
     if d_current >= datetime.datetime(2018, 10, 1):
         default_horizon = 18  # 18-hour forecasts.
-        six_hr_horizon = 36  # 36-hour forecasts every six hours.
+        six_hr_horizon = 48  # 48-hour forecasts every six hours.
     else:
         default_horizon = 18  # 18-hour forecasts.
         six_hr_horizon = 18  # 18-hour forecasts every six hours.
@@ -949,6 +949,7 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
         input_forcings.inDir
         + "/hrrr."
         + current_hrrr_cycle.strftime("%Y%m%d")
+        + "/conus"
         + "/hrrr.t"
         + current_hrrr_cycle.strftime("%H")
         + "z.wrfsfcf"
@@ -963,6 +964,7 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
         input_forcings.inDir
         + "/hrrr."
         + current_hrrr_cycle.strftime("%Y%m%d")
+        + "/conus"
         + "/hrrr.t"
         + current_hrrr_cycle.strftime("%H")
         + "z.wrfsfcf"
@@ -978,6 +980,7 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
             input_forcings.inDir
             + "/hrrr."
             + current_hrrr_cycle.strftime("%Y%m%d")
+            + "/conus"
             + "/hrrr.t"
             + current_hrrr_cycle.strftime("%H")
             + "z.wrfprsf"
@@ -992,6 +995,7 @@ def find_conus_hrrr_neighbors(input_forcings, config_options, d_current, mpi_con
             input_forcings.inDir
             + "/hrrr."
             + current_hrrr_cycle.strftime("%Y%m%d")
+            + "/conus"
             + "/hrrr.t"
             + current_hrrr_cycle.strftime("%H")
             + "z.wrfprsf"
@@ -1494,15 +1498,24 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
     """
     if d_current >= datetime.datetime(2018, 10, 1):
         default_horizon = 21  # 21-hour forecasts.
-        extra_hr_horizon = 39  # 39-hour forecasts at 3,9,15,21 UTC.
+        extra_hr_horizon = 51  # 51-hour forecasts at 3,9,15,21 UTC.
     else:
         default_horizon = 18  # 18-hour forecasts.
         extra_hr_horizon = 18  # 18-hour forecasts every six hours.
 
+    # First find the current RAP forecast cycle that we are using, and shift it if we're AnA or
+    # need an extended cycle
+
+    if config_options.ana_flag:
+        cycle_offset = 1
+    #elif config_options.current_fcst_cycle.hour % 6 == 0:
+    #    cycle_offset = 3
+    else:
+        cycle_offset = 0
+
     # First find the current RAP forecast cycle that we are using.
-    ana_offset = 1 if config_options.ana_flag else 0
     current_rap_cycle = config_options.current_fcst_cycle - datetime.timedelta(
-        seconds=(ana_offset + input_forcings.userCycleOffset) * 60.0
+        seconds=(cycle_offset + input_forcings.userCycleOffset) * 3600.0)
     )
     if (
         current_rap_cycle.hour == 3
@@ -1510,9 +1523,9 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
         or current_rap_cycle.hour == 15
         or current_rap_cycle.hour == 21
     ):
-        rap_horizon = default_horizon
-    else:
         rap_horizon = extra_hr_horizon
+    else:
+        rap_horizon = default_horizon
 
     # If the user has specified a forcing horizon that is greater than what is available
     # for this time period, throw an error.
@@ -1526,7 +1539,7 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
         )
         return
 
-    # Calculate the current forecast hour within this HRRR cycle.
+    # Calculate the current forecast hour within this RAP cycle.
     dt_tmp = d_current - current_rap_cycle
     current_rap_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
 
@@ -1695,7 +1708,7 @@ def find_conus_rap_neighbors(input_forcings, config_options, d_current, mpi_conf
         input_forcings.regridComplete = False
     err_handler.check_program_status(config_options, mpi_config)
 
-    # Ensure we have the necessary new file
+    # Ensure we have the necessary new files
     if not os.path.isfile(input_forcings.file_in2):
         # look for the `pgrb` equivalent:
         input_forcings.file_in2 = input_forcings.file_in2.replace("bgrb", "pgrb")
@@ -4292,31 +4305,15 @@ def find_hourly_nbm_neighbors(
         if not os.path.isfile(supplemental_precip.file_in2) and (
             (supplemental_precip.keyValue == 8) or (supplemental_precip.keyValue == 9)
         ):
-            config_options.statusMsg = (
-                "NBM file {} not found, will attempt to use {} instead.".format(
-                    supplemental_precip.file_in2, supplemental_precip.file_in1
-                )
-            )
-            err_handler.log_warning(config_options, mpi_config)
-            supplemental_precip.file_in2 = supplemental_precip.file_in1
-        if not os.path.isfile(supplemental_precip.file_in2):
-            if supplemental_precip.enforce == 1:
-                config_options.errMsg = (
-                    "Expected input NBM file: "
-                    + supplemental_precip.file_in2
-                    + " not found."
-                )
-                err_handler.log_critical(config_options, mpi_config)
-            else:
-                config_options.statusMsg = (
-                    "Expected input NBM file: "
-                    + supplemental_precip.file_in2
-                    + " not found. "
-                    + "Will not use in final layering."
-                )
-                err_handler.log_warning(config_options, mpi_config)
-                config_options.statusMsg = "You can use Util/pull_s3_grib_vars.py to Download NBM data from AWS-S3 archive."
-                err_handler.log_warning(config_options, mpi_config)
+
+            if config_options.use_data_at_current_time:
+                if supplemental_precip.enforce == 1:
+                    config_options.errMsg = "Required input NBM file: " + supplemental_precip.file_in2 + " not found."
+                    err_handler.log_critical(config_options, mpi_config)
+                else:
+                    config_options.statusMsg = f"Expected input NBM file: {supplemental_precip.file_in2} not available, will not use in final layering."
+                    err_handler.log_msg(config_options, mpi_config)
+
     err_handler.check_program_status(config_options, mpi_config)
 
     # If the file is missing, set the local slab of arrays to missing.

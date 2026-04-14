@@ -49,6 +49,9 @@ def layer_final_forcings(OutputObj, input_forcings, ConfigOptions, MpiConfig):
                 else:
                     indSet = np.where(layerIn != ConfigOptions.globalNdv)
                     outLayerCurrent[indSet] = layerIn[indSet]
+                    if force_idx == 8:
+                        calcSet = np.where(np.logical_and(outLayerCurrent != ConfigOptions.globalNdv, np.logical_or(outLayerCurrent < 0, outLayerCurrent > 1)))
+                        outLayerCurrent[calcSet] =  np.where(OutputObj.output_local[4,:,:] >= 273.15+2.2, 1.0, 0.0)[calcSet] # 2.2C threshold for rain/snow
                     OutputObj.output_local[force_idx, :, :] = outLayerCurrent
 
                 # Reset for next iteration and memory efficiency.
@@ -67,10 +70,14 @@ def layer_final_forcings(OutputObj, input_forcings, ConfigOptions, MpiConfig):
                 else:
                     indSet = np.where(layerIn != ConfigOptions.globalNdv)
                     outLayerCurrent[indSet] = layerIn[indSet]
+                    if force_idx == 8:
+                        calcSet = np.where(np.logical_and(outLayerCurrent != ConfigOptions.globalNdv, np.logical_or(outLayerCurrent < 0, outLayerCurrent > 1)))
+                        outLayerCurrent[calcSet] =  np.where(OutputObj.output_local[4,:] >= 273.15+2.2, 1.0, 0.0)[calcSet] # 2.2C threshold for rain/snow
                     OutputObj.output_local[force_idx, :] = outLayerCurrent
 
                 outLayerCurrent_elem = OutputObj.output_local_elem[force_idx, :]
                 layerIn_elem = input_forcings.final_forcings_elem[force_idx, :]
+
                 if (
                     input_forcings.product_name == "ERA5"
                     and [12, 21] in ConfigOptions.input_forcings
@@ -84,6 +91,9 @@ def layer_final_forcings(OutputObj, input_forcings, ConfigOptions, MpiConfig):
                 else:
                     indSet_elem = np.where(layerIn_elem != ConfigOptions.globalNdv)
                     outLayerCurrent_elem[indSet_elem] = layerIn_elem[indSet_elem]
+                    if force_idx == 8:
+                        calcSet_elem = np.where(np.logical_and(outLayerCurrent_elem != ConfigOptions.globalNdv, np.logical_or(outLayerCurrent_elem < 0, outLayerCurrent_elem > 1)))
+                        outLayerCurrent_elem[calcSet_elem] =  np.where(OutputObj.output_local_elem[4,:] >= 273.15+2.2, 1.0, 0.0)[calcSet_elem] # 2.2C threshold for rain/snow
                     OutputObj.output_local_elem[force_idx, :] = outLayerCurrent_elem
 
                 # Reset for next iteration and memory efficiency.
@@ -103,6 +113,9 @@ def layer_final_forcings(OutputObj, input_forcings, ConfigOptions, MpiConfig):
                 else:
                     indSet = np.where(layerIn != ConfigOptions.globalNdv)
                     outLayerCurrent[indSet] = layerIn[indSet]
+                    if force_idx == 8:
+                        calcSet = np.where(np.logical_and(outLayerCurrent != ConfigOptions.globalNdv, np.logical_or(outLayerCurrent < 0, outLayerCurrent > 1)))
+                        outLayerCurrent[calcSet] =  np.where(OutputObj.output_local[4,:] >= 273.15+2.2, 1.0, 0.0)[calcSet] # 2.2C threshold for rain/snow
                     OutputObj.output_local[force_idx, :] = outLayerCurrent
                 # Reset for next iteration and memory efficiency.
                 indSet = None

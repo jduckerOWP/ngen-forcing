@@ -112,6 +112,7 @@ class InputForcings:
         self.height = None
         self.height_elem = None
         self.tmpFile = None
+        self.tmpFile2 = None
         self.tmpFileHeight = None
         self.psfcTmp = None
         self.t2dTmp = None
@@ -291,7 +292,7 @@ class InputForcings:
                     "DSWRF",
                     "DLWRF",
                     "PRES",
-                    "FROZR",
+                    "LQFRAC",
                 ],
                 7: ["TMP", "SPFH", "UGRD", "VGRD", "PRATE", "DSWRF", "DLWRF", "PRES"],
                 8: ["TMP", "SPFH", "UGRD", "VGRD", "APCP", "PRES"],
@@ -312,7 +313,7 @@ class InputForcings:
                 23: ["TMP", "SPFH", "UGRD", "VGRD", "APCP", "DSWRF", "DLWRF", "PRES"],
                 24: ["TMP", "APCP"],
                 25: ["TMP", "WDIR", "WSPD", "APCP"],
-                26: ["TMP", "SPFH", "UGRD", "VGRD", "APCP", "DSWRF", "DLWRF", "PRES"],
+                26: ["TMP", "SPFH", "UGRD", "VGRD", "APCP", "DSWRF", "DLWRF", "PRES","CPOFP"],
                 27: [
                     "T2D",
                     "Q2D",
@@ -502,6 +503,7 @@ class InputForcings:
                 "surface",
                 "surface",
                 "surface",
+                "surface",
             ],
             27: None,
         }[self.keyValue]
@@ -553,7 +555,7 @@ class InputForcings:
                 "DSWRF_surface",
                 "DLWRF_surface",
                 "PRES_surface",
-                "FROZR_surface",
+                "LQFRAC_surface",
             ],
             7: [
                 "TMP_2maboveground",
@@ -692,6 +694,7 @@ class InputForcings:
                 "DSWRF_surface",
                 "DLWRF_surface",
                 "PRES_surface",
+                "CPOFP_surface",
             ],
             27: ["T2D", "Q2D", "U2D", "V2D", "RAINRATE", "SWDOWN", "LWDOWN", "PSFC"],
         }[self.keyValue]
@@ -762,7 +765,7 @@ class InputForcings:
             23: [4, 5, 0, 1, 3, 7, 2, 6],
             24: [4, 3],
             25: [4, 0, 1, 3],
-            26: [4, 5, 0, 1, 3, 7, 2, 6],
+            26: [4, 5, 0, 1, 3, 7, 2, 6, 8],
             27: [4, 5, 0, 1, 3, 7, 2, 6],
         }[self.keyValue]
 
@@ -880,8 +883,8 @@ class InputForcings:
         return {
             1: time_handling.find_nldas_neighbors,
             3: time_handling.find_gfs_neighbors,
-            5: time_handling.find_input_neighbors,
-            6: time_handling.find_input_neighbors,
+            5: time_handling.find_conus_hrrr_neighbors,
+            6: time_handling.find_conus_rap_neighbors,
             7: time_handling.find_cfsv2_neighbors,
             8: time_handling.find_hourly_wrf_arw_neighbors,
             9: time_handling.find_gfs_neighbors,

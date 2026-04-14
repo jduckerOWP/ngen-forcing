@@ -5,7 +5,6 @@ import uuid
 import mpi4py
 import numpy as np
 import os
-mpi4py.rc.threads = False
 
 from mpi4py import MPI
 

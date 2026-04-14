@@ -24,7 +24,7 @@ def run_downscaling(input_forcings, config_options, geo_meta_wrf_hydro, mpi_conf
     :return:
     """
     # Dictionary mapping to temperature downscaling.
-    downscale_temperature = {0: no_downscale, 1: simple_lapse, 2: param_lapse}
+    downscale_temperature = {0: no_downscale, 1: simple_lapse, 2: param_lapse, 3: dynamic_lapse}
     downscale_temperature[input_forcings.t2dDownscaleOpt](
         input_forcings, config_options, geo_meta_wrf_hydro, mpi_config
     )
@@ -399,6 +399,58 @@ def param_lapse(input_forcings, ConfigOptions, GeoMetaWrfHydro, MpiConfig):
     elevDiff = None
     temperature_grid_tmp = None
 
+def dynamic_lapse(input_forcings, config_options, geo_meta, mpi_config):
+    if mpi_config.rank == 0:
+        config_options.statusMsg = "Applying dynamic lapse rate grid to temperature downscaling"
+        err_handler.log_msg(config_options, mpi_config)
+
+    if input_forcings.lapseGrid is None:
+        if not os.path.isfile(input_forcings.file_in2):
+            if mpi_config.rank == 0:
+                config_options.errMsg = "Dynamic lapse rate downscaling enabled but no lapse grid available"
+                err_handler.log_warning(config_options, mpi_config)
+            return
+        if mpi_config.rank == 0:
+            config_options.errMsg = "Dynamic lapse rate downscaling enabled but no lapse grid available"
+            err_handler.log_critical(config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
+
+    else:
+        # Calculate the elevation difference.
+        if input_forcings.height is None:
+            config_options.errMsg = "Unable to perform downscaling without terrain height input"
+            err_handler.log_critical(config_options, mpi_config)
+            return
+
+        elevDiff = input_forcings.height - geo_meta.height
+
+        # Apply the local lapse rate grid to our local slab of 2-meter temperature data.
+        temperature_grid_tmp = input_forcings.final_forcings[4, :, :]
+        try:
+            indNdv = np.where(input_forcings.final_forcings == config_options.globalNdv)
+        except:
+            config_options.errMsg = "Unable to perform NDV search on input " + \
+                                    input_forcings.productName + " regridded forcings."
+            err_handler.log_critical(config_options, mpi_config)
+            return
+        try:
+            indValid = np.where(temperature_grid_tmp != config_options.globalNdv)
+        except:
+            config_options.errMsg = "Unable to perform search for valid values on input " + \
+                                    input_forcings.productName + " regridded temperature forcings."
+            err_handler.log_critical(config_options, mpi_config)
+            return
+        try:
+            temperature_grid_tmp[indValid] = temperature_grid_tmp[indValid] + \
+                ((input_forcings.lapseGrid[indValid]/1000.0)*elevDiff[indValid])
+        except Exception as e:
+            config_options.errMsg = "Unable to apply spatial lapse rate values to input " + \
+                                     input_forcings.productName + " regridded temperature forcings."
+            err_handler.log_critical(config_options, mpi_config)
+            return
+
+        input_forcings.final_forcings[4,:,:] = temperature_grid_tmp
+        input_forcings.final_forcings[indNdv] = config_options.globalNdv
 
 def pressure_down_classic(input_forcings, ConfigOptions, GeoMetaWrfHydro, MpiConfig):
     """Apply a single lapse rate adjustment to modeled surface pressure.
@@ -696,39 +748,10 @@ def nwm_monthly_PRISM_downscale(
             input_forcings.nwmPRISM_numGrid = None
             input_forcings.nwmPRISM_denGrid = None
 
-            if mmVersion == 1:
-                # Compose paths to the expected files.
-                numeratorPath = (
-                    input_forcings.paramDir
-                    + "/PRISM_Precip_Clim_"
-                    + ConfigOptions.current_output_date.strftime("%b")
-                    + "_NWM_Grid.nc"
-                )
-                denominatorPath = (
-                    input_forcings.paramDir
-                    + "/PRISM_Precip_Clim_"
-                    + ConfigOptions.current_output_date.strftime("%b")
-                    + "_NWM_to_"
-                    + str(keyValueStr)
-                    + "_Grid.nc"
-                )
-
-            elif mmVersion == 2:
-                # Compose paths to the expected files.
-                numeratorPath = (
-                    input_forcings.paramDir
-                    + "/PRISM_Precip_Clim_"
-                    + ConfigOptions.current_output_date.strftime("%b")
-                    + "_NWM_Grid.nc"
-                )
-                denominatorPath = (
-                    input_forcings.paramDir
-                    + "/PRISM_Precip_Clim_"
-                    + ConfigOptions.current_output_date.strftime("%b")
-                    + "_"
-                    + str(keyValueStr)
-                    + "_to_NWM_Grid.nc"
-                )
+            numeratorPath = input_forcings.paramDir + "/PRISM_Precip_Clim_" + \
+                            ConfigOptions.current_output_date.strftime('%h') + '_NWM_Mtn_Mapper_Numer.nc'
+            denominatorPath = input_forcings.paramDir + "/PRISM_Precip_Clim_" + \
+                              ConfigOptions.current_output_date.strftime('%h') + '_NWM_Mtn_Mapper_Denom.nc'
 
             # Make sure files exist.
             if not os.path.isfile(numeratorPath):
@@ -916,6 +939,9 @@ def nwm_monthly_PRISM_downscale(
     numLocal = input_forcings.nwmPRISM_numGrid
     denLocal = input_forcings.nwmPRISM_denGrid
 
+    # initialize downscale grid to initial grid
+    ratioRainGrid[:] = localRainRate
+
     # Establish index of where we have valid data.
     try:
         indValid = np.where(
@@ -986,16 +1012,6 @@ def nwm_monthly_PRISM_downscale(
         err_handler.log_critical(ConfigOptions, MpiConfig)
     err_handler.check_program_status(ConfigOptions, MpiConfig)
 
-    ## Convert local precip back to a rate (mm/s)
-    try:
-        ratioRainGrid[indValid] = ratioRainGrid[indValid] / 3600
-
-    except:
-        ConfigOptions.errMsg = (
-            "Unable to convert temporary precip rate from mm to mm/s."
-        )
-        err_handler.log_critical(ConfigOptions, MpiConfig)
-    err_handler.check_program_status(ConfigOptions, MpiConfig)
     input_forcings.final_forcings[3, :, :] = ratioRainGrid
 
     # Reset variables for memory efficiency
