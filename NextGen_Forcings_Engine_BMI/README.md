@@ -1,27 +1,34 @@
 # NextGen Forcings Engine BMI Overview
+The NextGen Forcings Engine BMI workflow here is a functioning forcing provider for the NextGen framework that can currently be integrated as a supporting BMI forcing provider within a given NextGen formulation or as a standalone forcing engine workflow that can produce a NextGen compatible forcing files (netcdf4 or catchment csv files). This workflow can streamline forcing file production for all NWMv3.0 operational configurations based on any given gridded or unstructured mesh domain. Current BMI forcing provider support however is only targeted for lumped formulations based on a given NextGen hydrofabric geopackage, while gridded and unstructured mesh (ie. coastal models) forcing support is still being developed. In all, the NextGen Forcings Engine workflow can streamline ESMF mesh production of a given NextGen hydrofabric geopackage, download all forcing file dependencies based on the NWM operational configuration requested, and then implement a ESMF Bilinear regridding of the forcing data to the given target domain of interest (primarily used only for NextGen hydrofabric catchment elements currently). Below is the current breakdown of the current workflow.
 
-
-
-
+config.yml input file -> ESMF Mesh production for target NextGen hydrofabric -> forcing file download based on NWMv3.0 operational configuration -> NextGen Forcing Engine ESMF Blilinear Regridding of targeted domain features (grid cells, nodes, and/or elements) -> NextGen compatible lumped forcing file output (netcdf or catchment csv files) OR BMI advertisement of regridded forcing output fields based on catchment ids
 
 # Forcing Extraction Scripts Directory
-This directory contains a series of scripts for each NWM domain subdirectory (CONUS, Alaska, Puerto Rico, Hawaii) that encompasses the required meteorological forcing data products needed for each regional NWMv3.0 operational configuration setup. Each script is a particular meteorlogical forcing data product that is available to download off the NOMADS server. Availability of each meteorlogical forcing data product varies, but a user can generally extract at least the last 24 hours of previous data products or forecast cycles available. Setup, installation, and examples of utilizing these Python tools are further described within The ReadMe.md file in the directory as well as it's own Wiki Pages subsection. 
+This directory contains a series of scripts for each NWM domain subdirectory (CONUS, Alaska, Puerto Rico, Hawaii) that encompasses the required meteorological forcing data products needed for each regional NWMv3.0 operational configuration setup. Each script is a particular meteorlogical forcing data product that is available to download off AWS s3 buckets or the NOMADS server. Availability of each meteorlogical forcing data product varies, but a user can generally extract at least the last 24 hours of previous data products or forecast cycles available, with longer lookback periods for datasets harbored on AWS s3 buckets. Setup, installation, and examples of utilizing these Python tools are further described within The ReadMe.md file in the directory as well as it's own Wiki Pages subsection. 
 
 # ESMF Mesh Domain Configuration Production Directory
-This directory contains Python scripts that are only focused on coverting model domain file formats into a ESMF mesh compliant netcdf file that can be directly utilized by the NextGen Forcings Engine BMI. So far, this repository contains scripts to convert a NextGen hydrofabric geopackage or coastal model mesh file inputs (D-FlowFM, SCHISM) into ESMF mesh compliant netcdf files. Future updates to this repository will reflect more NextGen model formulations as they become available
-
+This directory contains Python scripts that are only focused on coverting model domain file formats into a ESMF mesh compliant netcdf file that can be directly utilized by the NextGen Forcings Engine BMI. So far, this repository contains scripts to convert a NextGen hydrofabric geopackage or coastal model mesh file inputs (D-FlowFM, SCHISM) into ESMF mesh compliant netcdf files. Future updates to this repository will reflect more NextGen model formulations as they become available.
 
 # NextGen Forcings EWTS
+This is the NextGen Logging configuration for the Error Warning and Trapping System (EWTS). This module defines the centralized logging configuration used by EWTS. It is responsible for creating and configuring a single, named logger within the Python logging framework, based on environment variables provided by the runtime environment (e.g., ngen). Logging configuration is performed via configure_logging(), which applies handlers, formatters, and log levels to the EWTS logger. The configuration function is idempotent: once the logger has been initialized, subsequent calls return immediately without modifying the existing configuration. Configuration behavior is controlled by environment variables, whose names are defined in constants.py:
+- EV_EWTS_LOGGING: Enables or disables EWTS logging. If set to "DISABLED", logging is disabled entirely for the EWTS logger. If unset, logging is enabled by default.
 
+- EV_MODULE_LOGLEVEL: Specifies the log level for the EWTS logger. Supported values include standard Python logging levels as well as ngen-style levels (e.g., "SEVERE", "FATAL"), which are translated to Python equivalents.
+
+Log output is directed to a file determined by the path-resolution utilities in paths.py. If a log file cannot be created, logging falls back to stdout. This module does not expose logging APIs directly; callers are expected to retrieve the configured logger by name using logging.getLogger(MODULE_NAME).
 
 
 
 # NextGen Forcings Engine Basic Model Interface Setup and Execution
-1.	Within your python environment, make sure to install the “bmipy” and “yaml” libraries to enable BMI functionality for the NextGen Forcings Engine to utilize. 
-2.	Within the “NextGen_Forcings_Engine_BMI” directory, there is a sub-directory called “BMI_NextGen_Configs” that contains all the BMI configuration files needed for a Medium range forecast ran by GFS that would support a gridded model (./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/Gridded/config.yml), an unstructured mesh coastal model (./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/gridded/config.yml), and a hydrofabric unstructured mesh ((./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/Medium_Range/hydrofabric/config.yml) as a supported domain to extract regridded forcings in a BMI-complaint fashion. Copy over one of those config.yml files to the “NextGen_Forcings_Engine_BMI” main directory for BMI execution of the NextGen Forcings Engine. Inside each config.yml contains a set of standard NWMv3.0 Forcing Engine variables that allow a given user to utilize a variety of methods, which are further described in the “./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/README.md” file.
-3.	To test out the NextGen Forcings Engine BMI functionality, please see the “./NextGen_Forcings_Engine_BMI/README.md” file that highlights the utility of each of the BMI Python scripts as well as supporting sub-directories contained within the repository. 
+1.	Within the “NextGen_Forcings_Engine_BMI” directory, there is a sub-directory called “BMI_NextGen_Configs/config_templates” that contains all the BMI configuration files for NWMv3.0 operational configurations across the NWMv3.0 operational domains. Inside each config.yml contains a set of standard NWMv3.0 Forcing Engine variables that allow a given user to utilize a variety of methods, which are further described in the “./NextGen_Forcings_Engine_BMI/BMI_NextGen_Configs/README.md” file. Copy over the config.yml file of interest to the same working directory where the bmi_wrapper.py Python script is located.
+2.	Execute the NextGen Forcings Engine BMI based on the overall methodology highlighted below:
 
-# Overview bullet points for modifying the original NWM Forcings Engine into a BMI complaint NextGen Forcings Engine capable of handling any domain types
+- mpirun -n 1 python bmi_wrapper.py ./short_range_config_ngwpc.yml -output_path ./Scratch/Short_Range -np 2
+
+- Required arguments:  pathway to config.yml (./short_range_config_ngwpc.yml), pathway to output directory containing forcing input data and forcing file output dats (-output_path ./Scratch/Short_Range), number of MPI processes to execute the NextGen Forcings Engine (-np 2)
+
+
+# Overview bullet points for modifying the original NCAR/WrfHydroForcing workflow into a BMI complaint NextGen Forcings Engine capable of handling any domain types
   •	To streamline the NWMv3.0 Forcings engine into a Basic Model Interface application, we’ve had to initialize the BMI model using the same approach highlighted in the “genForcing.py” module and then directly reconfigure the forecast module (forecastMod.py) workflow to streamline the ability to update and produce gridded forcings for the WRFHydro domain based on a specified time stamp within the standard BMI functionality (“model_update_until”). This is all completed within the “model.py” module, which essentially mimics the “forecastMod.py” module within the “core” directory as a BMI-compliant module. 
 
   •	Once source code modifications were implemented, we were able to demonstrate the ability for the NextGen Forcings Engine to advertise gridded and unstructured mesh forcings back to the NextGen model engine.
@@ -39,6 +46,7 @@ This directory contains Python scripts that are only focused on coverting model 
 7.	Initializes input object (forcingInputMod.py) input forcing classes. These objects will contain information about our source products (I.E. data type, grid sizes, etc). Information will be mapped based on options specified by the user. In addition, input ESMF grid objects will be created to hold data for downscaling and regridding purposes. Essentially, each processor will initialize their own empty arrays for forcings variables to get regridded/filled and then bias correct/downscale based on the given operational configuration. 
 8.	If we have a specified supplementary precipitation dataset for a given operational configuration, then we must initialize the supplementary precip (suppPrecipMod.py) class, which will process the precipitation dataset configurations, its regridding technique, and the file type/variable inputs for a given supplementary dataset.
 9.	With all classes initialized for the Forcing Engine, we can now call the BMI NextGen Forcings Engine model (model.py) to process the operational configuration and forecast data into regridded hourly output files configured to the NWM domain coordinate reference system and metadata.
+
 # NextGen Forcings Engine Workflow to Process Operational Forecast Data Overview
 1.	If user selected supplementary precipitation option for forcing dataset, then the script calls the module to provide disaggregation functionality (dissaggregateMod.py). This module reads in user configuration options for the supplementary precipitation data and then determines whether or not if the precipitation data is hourly or 6-hourly intervals. If the data is indeed 6-hourly accumulated precipitation, then the module will return the disaggregate function, which will essentially read the data and interpolate the precipitation data down to hourly intervals and set the forcing precipitation input array for ESMF regridding in the following steps.
 2.	Calculate forecast cycle number, create output forecast directory and log file for forecast cycle (if needed) and configure AnA cycle for look back period based on operational configuration and current forecast cycle time (if needed).
@@ -52,9 +60,10 @@ This directory contains Python scripts that are only focused on coverting model 
 4.	Once the forecast cycle has been completed; close the log file and loop through the next forecast cycle number if necessary for given operational configuration. 
 5.	If forecast cycle is complete then the NWMv3.0 Forcings Engine finalizes the log file and shuts down the MPI communications. 
 
-# Testing BMI Python modules.
- - ./NextGen_Forcings_Engine/model.py: This file is the "NextGen Forcings Engine Driver" it takes inputs and gives an output
+# Description of Associated Files and Sub-directories
  - ./NextGen_Forcings_Engine/bmi_model.py: This is the Basic Model Interface that talks with the model. This is the NextGen Forcings Engine BMI class.
+ - ./NextGen_Forcings_Engine/model.py: This file is the "NextGen Forcings Engine Driver", which drives the BMI model execution of the forcings provider. 
+ - bmi_wrapper.py: This if the main driver script for the NextGen Forcings Engine BMI that streamlines ESMF mesh production, forcing file downloading, and the BMI execution of the forcings provider (via. run_bmi_model.py).
  - run_bmi_model.py: This is a file that mimics the framework, in the sense that it initializes the model with the BMI function. Then it runs the model with the BMI Update function, etc.
  - run_bmi_unit_test.py: This is a file that runs each BMI unit test to make sure that the BMI is complete and functioning as expected.
  - config.yml: This is a configuration file that the BMI reads to set inital_time (initial value of current_model_time) and all the required variables needed to drive the NextGen Forcings Engine.
@@ -64,19 +73,4 @@ This directory contains Python scripts that are only focused on coverting model 
  - ./BMI_NextGen_Configs/: A sub-directory containing all the current config.yml BMI file setupts that will allow a a user to driver the NextGen BMI Forcings Engine for a gridded domain, a coastal-model unstructured mesh domain, and a NextGen hydrofabric (VPU 06) unstructured mesh domain. 
  - ./NextGen_Domains/: A sub-directory that contains a sample domain geogrid file for a gridded domain, a coastal-model unstructured mesh domain, and a NextGen hydrofabric (VPU 06) unstructured mesh domain that can all be utitlized currently to regrid forcings for a Medium Range forecast simulation driver by GFS forcings.
  - ./NWM_Params/: An empty sub-directory that will eventually contain supporting climatology files that will support implementing various bias calibration and downscaling technqius that are only associated with the original WRF-Hydro domain (aka NOAH-OWP Modular).
- - ./Unit_Test_Output/: An sub-directory that is essentially the current scratch directory setup within each of the config.yml files to temporary place I/O commands and the log file of the progress of the NextGen Forcings Engine
 
-# About
-This is an implementation of a Python-based model that fulfills the Python language BMI interface and can be used in the Framework. It is intended to serve as a control for testing purposes, freeing the framework from dependency on any real-world model in order to test BMI related functionality.
-
-## Test the complete BMI functionality
-`python run_bmi_unit_test.py`
-
-## Run the BMI model in a standalone mode
-`python run_bmi_model.py`
-
-## Sample output
-'model time', 'U2D_ELEMENT', 'V2D_ELEMENT', 'LWDOWN_ELEMENT','SWDOWN_ELEMENT','T2D_ELEMENT','Q2D_ELEMENT','PSFC_ELEMENT','RAINRATE_ELEMENT' 
-3600 -0.34978889998563434 1.9576997889275944 353.8881030867496 635.9115803301148 299.8541540030717 0.01014856288865672 101253.80092868667 0.0
-7200 -0.55664622087895 1.7230866051531413 351.70806444209256 446.07219911115914 299.7995647600879 0.01005461030680388 101259.55711493774 0.0
-10800 -0.2516353004284137 1.4639377367413153 347.3662126755073 221.91463406286712 299.4248073664293 0.01016205978429921 101303.53098399537 0.0
