@@ -20,6 +20,7 @@ ForecastFrequency: 60
 ForecastShift: 0
 ForecastInputHorizons: [1080,1080]
 ForecastInputOffsets: [0,0]
+Geopackage: "/srv/data/esmf_mesh/Gage_01011001.gpkg"
 GeogridIn: "/srv/data/esmf_mesh/Gage_01011001_ESMF_Mesh.nc"
 SpatialMetaIn: ""
 GRID_TYPE: "hydrofabric"
