@@ -377,6 +377,13 @@ class OutputObj:
                     err_handler.log_critical(ConfigOptions, MpiConfig)
                     break
 
+                try:
+                    self.idOut.variables["Time"].epoch_start = "01/01/1970 00:00:00"
+                except Exception as e:
+                    ConfigOptions.errMsg = f"Unable to create time epoch_start attribute in: {self.outPath} - {e}"
+                    err_handler.log_critical(ConfigOptions, MpiConfig)
+                    break
+                    
                 # Set dimension fields for different grid types
                 if ConfigOptions.grid_type == "gridded":
                     dim_x = "x"
