@@ -20,18 +20,18 @@ import forcing_extraction
 import esmf_creation
 
 
-def execute(forcing_config_input: str, config_input: str = None, output_path: str = None):
+def execute(forcing_config_input: str, config_input: str = None):
     """
     Execute the preprocessing steps for NextGen Forcings Engine pipeline in standalone mode.
 
     Modules executed: ESMF Mesh Conversion and Forcing Extraction.
 
-    This method accepts the cycle name, hydrofabric file, configuration file path, and output path.
+    This method accepts expects all the output pathways to already be hard coded into
+    the forcing configuration input file, which is te requriment for this driver script.
     It handles mesh conversion and forcing extraction using the specified parameters.
 
     :param forcing_config_input: Path to forcing engine configuration file for forecast run
     :param config_input: Optional path to the wrapper config file.
-    :param output_path: Optional full path to specify forcing engine output location.
     :return: None
     """
     print_git_info_all()
@@ -84,11 +84,7 @@ def main():
     args = get_options()
 
     # Call execute with parsed arguments
-    execute(
-        forcing_config_input=args.forcing_config_input,
-        config_input=args.config_input,
-        output_path=args.output_path
-    )
+    execute(forcing_config_input=args.forcing_config_input,config_input=args.config_input)
 
 
 def get_options():
@@ -104,9 +100,6 @@ def get_options():
     parser.add_argument('forcing_config_input',
                         type=str,
                         help='Path to forcing engine configuration file for forecast run')
-    parser.add_argument('-output_path',
-                        type=str,
-                        help='Full path for nc output file.')
     parser.add_argument('-config_input',
                         type=str,
                         help='Path to wrapper config file. If omitted, defaults to ./wrapper_config.yml')
