@@ -69,12 +69,6 @@ def execute(forcing_config_input: str, config_input: str = None, output_path: st
                                   ana_flag=forcing_config['AnAFlag'],
                                   look_back=forcing_config['LookBack'])
 
-    # Create mesh file
-    esmf_creation.create_mesh(esmf_cfg)
-
-    # Extract forcing
-    forcing_extraction.retrieve_forcing(extract_cfg)
-
     # Extract paths and environment names from the configuration file
     mesh_outPath = forcing_config['GeogridIn']
     bmi_scriptPath = config['global']['bmi_script_path']
