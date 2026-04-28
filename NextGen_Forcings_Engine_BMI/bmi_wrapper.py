@@ -16,20 +16,16 @@ import yaml
 from types import SimpleNamespace
 from git_util import print_git_info_all
 
-import forcing_extraction
-import esmf_creation
-
 
 def execute(forcing_config_input: str, config_input: str = None, output_path: str = None, csv_path: str = None, np: str = None):
     """
-    Execute the full forcings engine BMI pipeline in standalone mode.
+    Execute the NextGen Forcings Engine BMI pipeline in standalone mode.
 
-    Modules executed: ESMF Mesh Conversion, Forcing Extraction, Forcing Engine BMI.
+    Modules executed: Forcing Engine BMI.
 
     This method accepts the cycle name, hydrofabric file, configuration file path,
     output path, and number of processes to run the BMI Forcings Engine pipeline.
-    It handles mesh conversion, forcing extraction, and finally the execution of the
-    BMI engine using the specified parameters.
+    This handles the execution of the BMI forcing engine using the specified parameters.
 
     :param forcing_config_input: Path to forcing engine configuration file for forecast run
     :param config_input: Optional path to the wrapper config file.
