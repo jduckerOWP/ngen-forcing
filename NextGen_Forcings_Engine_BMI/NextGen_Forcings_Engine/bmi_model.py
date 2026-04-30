@@ -23,8 +23,6 @@ from bmipy import Bmi
 # Import MPI Python module
 from mpi4py import MPI
 
-import esmf_creation, forcing_extraction
-
 from .bmi_grid import Grid, GridType
 from .core import (
     config,
@@ -254,16 +252,6 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
             self._mpi_meta.initialize_comm(self._job_meta, comm=comm)
         except Exception as e:
             err_handler.err_out_screen(self._job_meta.errMsg, e)
-
-        # LOG.debug(f"self._job_meta type: {type(self._job_meta)}")
-        # Call ESMF mesh creation process
-        if self._mpi_meta.rank == 0:
-            esmf_creation.create_mesh(self._job_meta)
-        self._mpi_meta.comm.Barrier()
-
-        # Call forcing_extraction process
-        if self._job_meta.nwmConfig not in ["AORC", "NWM"]:
-            forcing_extraction.retrieve_forcing(self._job_meta)
 
         # Initialize our WRF-Hydro geospatial object, which contains
         # information about the modeling domain, local processor
