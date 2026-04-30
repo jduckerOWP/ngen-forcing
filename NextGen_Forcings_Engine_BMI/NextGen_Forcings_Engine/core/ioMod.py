@@ -748,15 +748,25 @@ class OutputObj:
                                     least_significant_digit=least_significant_digit,
                                 )
                         else:
-                            self.idOut.createVariable(
-                                varTmp,
-                                dtype,
-                                ("time", dim_y),
-                                fill_value=fill_value,
-                                zlib=zlib,
-                                complevel=complevel,
-                                least_significant_digit=least_significant_digit,
-                            )
+                            if ConfigOptions.project == "noaa_owp":
+                                self.idOut.createVariable(
+                                    varTmp,
+                                    dtype,
+                                    (dim_y, "time"),
+                                    fill_value=fill_value,
+                                    zlib=zlib,
+                                    complevel=complevel,
+                                    least_significant_digit=least_significant_digit,
+                                )
+                            else:
+                                self.idOut.createVariable(
+                                    varTmp,
+                                    dtype,
+                                    ("time", dim_y),
+                                    fill_value=fill_value,
+                                    zlib=zlib,
+                                    complevel=complevel,
+                                    least_significant_digit=least_significant_digit,
 
                     except Exception as e:
                         ConfigOptions.errMsg = f"Unable to create {varTmp} variable in: {self.outPath} - {e}"
