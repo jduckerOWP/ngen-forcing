@@ -1006,9 +1006,14 @@ class OutputObj:
                 # Populate time variables
                 dEpoch = datetime.datetime(1970, 1, 1)
                 dtValid = ConfigOptions.current_time - dEpoch
-                idOut.variables["Time"][int(ConfigOptions.bmi_time_index)] = int(
-                    dtValid.days * 24.0 * 60
-                ) + int(math.floor(dtValid.seconds / 60.0))
+                if ConfigOptions.project == "noaa_owp":
+                    idOut.variables["Time"][:,int(ConfigOptions.bmi_time_index)] = int(
+                        dtValid.days * 24.0 * 60
+                    ) + int(math.floor(dtValid.seconds / 60.0))
+                else:
+                    idOut.variables["Time"][int(ConfigOptions.bmi_time_index)] = int(
+                        dtValid.days * 24.0 * 60
+                    ) + int(math.floor(dtValid.seconds / 60.0))
 
             except Exception as e:
                 ConfigOptions.errMsg = (
