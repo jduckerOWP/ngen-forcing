@@ -571,27 +571,7 @@ def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig, GeoMeta
             + str(numCells)
             + " regridded pixel cells."
         )
-        valid_coords = np.empty(
-            (len(GeoMeta.latitude_grid[indCheck_valid[0]]), 2), dtype=float
-        )
-        invalid_coords = np.empty(
-            (len(GeoMeta.latitude_grid[indCheck[0]]), 2), dtype=float
-        )
-        valid_coords[:, 0] = GeoMeta.longitude_grid[indCheck_valid[0]]
-        valid_coords[:, 0] = GeoMeta.latitude_grid[indCheck_valid[0]]
-        invalid_coords[:, 0] = GeoMeta.longitude_grid[indCheck[0]]
-        invalid_coords[:, 0] = GeoMeta.latitude_grid[indCheck[0]]
-        distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
-        supplemental_precip.regridded_precip2[indCheck[0]] = (
-            supplemental_precip.regridded_precip2[pet_inds]
-        )
-        del valid_coords
-        del invalid_coords
-        del distance
-        del pet_inds
-        indCheck = None
-        indCheck_valid = None
-        return
+        LOG.error(ConfigOptions.errMsg)
 
     # Check to see if any pixel cells are above the maximum value.
     indCheck = np.where(
@@ -611,69 +591,8 @@ def check_supp_pcp_bounds(ConfigOptions, supplemental_precip, MpiConfig, GeoMeta
             + str(numCells)
             + " regridded pixel cells."
         )
-        valid_coords = np.empty(
-            (len(GeoMeta.latitude_grid[indCheck_valid[0]]), 2), dtype=float
-        )
-        invalid_coords = np.empty(
-            (len(GeoMeta.latitude_grid[indCheck[0]]), 2), dtype=float
-        )
-        valid_coords[:, 0] = GeoMeta.longitude_grid[indCheck_valid[0]]
-        valid_coords[:, 0] = GeoMeta.latitude_grid[indCheck_valid[0]]
-        invalid_coords[:, 0] = GeoMeta.longitude_grid[indCheck[0]]
-        invalid_coords[:, 0] = GeoMeta.latitude_grid[indCheck[0]]
-        distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
-        # log_critical(ConfigOptions, MpiConfig)
-        supplemental_precip.regridded_precip2[indCheck[0]] = (
-            supplemental_precip.regridded_precip2[pet_inds]
-        )
-
-        indCheck = np.where(
-            (supplemental_precip.regridded_precip2 != ConfigOptions.globalNdv)
-            & (supplemental_precip.regridded_precip2 > 100.0)
-        )
-        indCheck_valid = np.where(
-            (supplemental_precip.regridded_precip2 > 0.0)
-            & (supplemental_precip.regridded_precip2 < 100.0)
-        )
-        if len(indCheck[0]) > 0:
-            valid_coords = np.empty(
-                (len(GeoMeta.latitude_grid[indCheck_valid[0]]), 2), dtype=float
-            )
-            invalid_coords = np.empty(
-                (len(GeoMeta.latitude_grid[indCheck[0]]), 2), dtype=float
-            )
-            valid_coords[:, 0] = GeoMeta.longitude_grid[indCheck_valid[0]]
-            valid_coords[:, 0] = GeoMeta.latitude_grid[indCheck_valid[0]]
-            invalid_coords[:, 0] = GeoMeta.longitude_grid[indCheck[0]]
-            invalid_coords[:, 0] = GeoMeta.latitude_grid[indCheck[0]]
-            distance, pet_inds = spatial.KDTree(valid_coords).query(invalid_coords)
-            supplemental_precip.regridded_precip2[indCheck[0]] = (
-                supplemental_precip.regridded_precip2[pet_inds]
-            )
-        del valid_coords
-        del invalid_coords
-        del distance
-        del pet_inds
-        indCheck = None
-        indCheck_valid = None
+        LOG.error(ConfigOptions.errMsg)
         return
-
-    # Check to see if any pixel cells are above the maximum value.
-    indCheck = np.where(
-        (supplemental_precip.regridded_precip2 != ConfigOptions.globalNdv)
-        & (supplemental_precip.regridded_precip2 > 100.0)
-    )
-    numCells = len(indCheck[0])
-    if numCells > 0:
-        ConfigOptions.errMsg = (
-            "Supplemental precip data above maximum threshold for in "
-            + supplemental_precip.file_in2
-            + " for "
-            + str(numCells)
-            + " regridded pixel cells."
-        )
-        log_critical(ConfigOptions, MpiConfig)
-
     return
 
 
