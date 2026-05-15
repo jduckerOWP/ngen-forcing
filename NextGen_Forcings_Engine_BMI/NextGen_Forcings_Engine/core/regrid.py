@@ -1172,12 +1172,6 @@ def _regrid_conus_ext_ana_pcp_stage4(
                     var_tmp = id_tmp.variables[
                         supplemental_precip.netcdf_var_names[-1]
                     ][0, :, :]
-                    var_tmp = np.where(
-                        var_tmp
-                        == id_tmp[supplemental_precip.netcdf_var_names[0]]._FillValue,
-                        0.0,
-                        var_tmp,
-                    )
                 except (ValueError, KeyError, AttributeError) as err:
                     config_options.errMsg = (
                         "Unable to extract precipitation from STAGE IV file: "
@@ -1206,12 +1200,6 @@ def _regrid_conus_ext_ana_pcp_stage4(
                     var_tmp = id_tmp.variables[
                         supplemental_precip.netcdf_var_names[-1]
                     ][0, :, :].data
-                    var_tmp = np.where(
-                        var_tmp
-                        == id_tmp[supplemental_precip.netcdf_var_names[0]]._FillValue,
-                        0.0,
-                        var_tmp,
-                    )
                 except (ValueError, KeyError, AttributeError) as err:
                     config_options.errMsg = (
                         "Unable to extract precipitation from STAGE IV file: "
@@ -1240,12 +1228,6 @@ def _regrid_conus_ext_ana_pcp_stage4(
                     var_tmp_elem = id_tmp.variables[
                         supplemental_precip.netcdf_var_names[-1]
                     ][0, :, :].data
-                    var_tmp_elem = np.where(
-                        var_tmp_elem
-                        == id_tmp[supplemental_precip.netcdf_var_names[0]]._FillValue,
-                        0.0,
-                        var_tmp_elem,
-                    )
                 except (ValueError, KeyError, AttributeError) as err:
                     config_options.errMsg = (
                         "Unable to extract precipitation from STAGE IV file: "
@@ -1275,12 +1257,6 @@ def _regrid_conus_ext_ana_pcp_stage4(
                     var_tmp = id_tmp.variables[
                         supplemental_precip.netcdf_var_names[-1]
                     ][0, :, :]
-                    var_tmp = np.where(
-                        var_tmp
-                        == id_tmp[supplemental_precip.netcdf_var_names[0]]._FillValue,
-                        0.0,
-                        var_tmp,
-                    )
                 except (ValueError, KeyError, AttributeError) as err:
                     config_options.errMsg = (
                         "Unable to extract precipitation from STAGE IV file: "
@@ -1340,13 +1316,20 @@ def _regrid_conus_ext_ana_pcp_stage4(
             err_handler.check_program_status(config_options, mpi_config)
 
             # Convert the 6-hourly precipitation total to a rate of mm/s
+            # And set values lying outside of input domain to global missing
+            # value so they are not filled by the supplementary precipitation product
             try:
                 ind_valid = np.where(
-                    supplemental_precip.regridded_precip2 != config_options.globalNdv
+                    supplemental_precip.regridded_precip2 < 1e10
                 )
                 supplemental_precip.regridded_precip2[ind_valid] = (
                     supplemental_precip.regridded_precip2[ind_valid] / 3600.0
                 )
+                invalid = np.where(supplemental_precip.regridded_precip2 > 1e10)
+                supplemental_precip.regridded_precip2[invalid] = (
+                    config_options.globalNdv
+                )
+                del invalid
                 del ind_valid
             except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
                 config_options.errMsg = (
@@ -1407,13 +1390,20 @@ def _regrid_conus_ext_ana_pcp_stage4(
             err_handler.check_program_status(config_options, mpi_config)
 
             # Convert the 6-hourly precipitation total to a rate of mm/s
+            # And set values lying outside of input domain to global missing
+            # value so they are not filled by the supplementary precipitation product
             try:
                 ind_valid = np.where(
-                    supplemental_precip.regridded_precip2 != config_options.globalNdv
+                    supplemental_precip.regridded_precip2 < 1e10
                 )
                 supplemental_precip.regridded_precip2[ind_valid] = (
                     supplemental_precip.regridded_precip2[ind_valid] / 3600.0
                 )
+                invalid = np.where(supplemental_precip.regridded_precip2 > 1e10)
+                supplemental_precip.regridded_precip2[invalid] = (
+                    config_options.globalNdv
+                )
+                del invalid
                 del ind_valid
             except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
                 config_options.errMsg = (
@@ -1475,14 +1465,20 @@ def _regrid_conus_ext_ana_pcp_stage4(
             err_handler.check_program_status(config_options, mpi_config)
 
             # Convert the 6-hourly precipitation total to a rate of mm/s
+            # And set values lying outside of input domain to global missing
+            # value so they are not filled by the supplementary precipitation product
             try:
                 ind_valid = np.where(
-                    supplemental_precip.regridded_precip2_elem
-                    != config_options.globalNdv
+                    supplemental_precip.regridded_precip2_elem < 1e10
                 )
                 supplemental_precip.regridded_precip2_elem[ind_valid] = (
                     supplemental_precip.regridded_precip2_elem[ind_valid] / 3600.0
                 )
+                invalid = np.where(supplemental_precip.regridded_precip2_elem > 1e10)
+                supplemental_precip.regridded_precip2_elem[invalid] = (
+                    config_options.globalNdv
+                )
+                del invalid
                 del ind_valid
             except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
                 config_options.errMsg = (
@@ -1542,20 +1538,22 @@ def _regrid_conus_ext_ana_pcp_stage4(
             )
             err_handler.check_program_status(config_options, mpi_config)
 
-            # Convert fill value to globalNdv. Convert 1 hr precip to mm/s
+            # Convert the 6-hourly precipitation total to a rate of mm/s
+            # And set values lying outside of input domain to global missing
+            # value so they are not filled by the supplementary precipitation product
             try:
                 ind_valid = np.where(
-                    supplemental_precip.regridded_precip2 != 9.999e20
-                )  # config_options.globalNdv)
+                    supplemental_precip.regridded_precip2 < 1e10
+                )
                 supplemental_precip.regridded_precip2[ind_valid] = (
                     supplemental_precip.regridded_precip2[ind_valid] / 3600.0
                 )
-                invalid = np.where(supplemental_precip.regridded_precip2 == 9.999e20)
+                invalid = np.where(supplemental_precip.regridded_precip2 > 1e10)
                 supplemental_precip.regridded_precip2[invalid] = (
                     config_options.globalNdv
                 )
-                del ind_valid
                 del invalid
+                del ind_valid            
             except (ValueError, ArithmeticError, AttributeError, KeyError) as npe:
                 config_options.errMsg = (
                     "Unable to run NDV search on STAGE IV supplemental precipitation: "
