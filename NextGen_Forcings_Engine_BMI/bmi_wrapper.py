@@ -96,6 +96,9 @@ def execute(forcing_config_input: str, config_input: str = None, output_path: st
         else None
     )
 
+    # Look for $PYTHON, fallback to 'python3' if it isn't set
+    python_bin = os.environ.get('PYTHON', 'python3')
+    
     # Build command for the BMI engine
     command = []
 
@@ -105,7 +108,7 @@ def execute(forcing_config_input: str, config_input: str = None, output_path: st
 
     # Main Python call
     command += [
-        "python3", bmi_scriptPath,
+        python_bin, bmi_scriptPath,
         f"-config_path={forcing_config_input}",
         f"-b_date={b_date}",
         f"-geogrid={mesh_outPath}",
@@ -128,7 +131,7 @@ def execute(forcing_config_input: str, config_input: str = None, output_path: st
         post_process_script = os.path.join(module_dir, "post_process", "netcdf_to_csv.py")
 
         subprocess.run(
-            ["python3", post_process_script, f"{output_path}", f"{csv_path}"],
+            [python_bin, post_process_script, f"{output_path}", f"{csv_path}"],
             check=True
         )
 
