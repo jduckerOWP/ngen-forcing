@@ -767,7 +767,7 @@ class OutputObj:
                                     zlib=zlib,
                                     complevel=complevel,
                                     least_significant_digit=least_significant_digit,
-
+                                )
                     except Exception as e:
                         ConfigOptions.errMsg = f"Unable to create {varTmp} variable in: {self.outPath} - {e}"
                         err_handler.log_critical(ConfigOptions, MpiConfig)
