@@ -13,7 +13,7 @@ class GFSDownloader(ForecastDownloader):
     """
 
     default_lookback = 8
-    default_cleanback = 240
+    default_cleanback = 384
     default_lagback = 4
 
     @property
@@ -25,7 +25,7 @@ class GFSDownloader(ForecastDownloader):
 
     def get_download_targets(self, _):
         hourly = range(1, 121)  # 1 through 120
-        every_3h = range(123, 241, 3)  # 123 through 240, step of 3
+        every_3h = range(123, 385, 3)  # 123 through 240, step of 3
         return list(hourly) + list(every_3h)
 
     def build_output_dir(self, d_start, _):
