@@ -21,7 +21,7 @@ class HRRRSubhourlyDownloader(ForecastDownloader):
 
     @property
     def base_url(self):
-        return "https://nomads.ncep.noaa.gov/pub/data/nccf/com/hrrr/prod"
+        return "https://noaa-hrrr-bdp-pds.s3.amazonaws.com"
 
     def should_process_hour(self, d_current):
         return True  # All hours valid for subhourly HRRR
