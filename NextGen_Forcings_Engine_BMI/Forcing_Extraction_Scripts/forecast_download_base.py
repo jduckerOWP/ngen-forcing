@@ -41,7 +41,7 @@ class ForecastDownloader(ABC):
     default_cleanback = 240
     default_lagback = 6
 
-    def __init__(self, out_dir, start_time, lookback_hours, cleanback_hours, lagback_hours, ens_number, input_forcing):
+    def __init__(self, out_dir, start_time, lookback_hours, cleanback_hours, lagback_hours, ens_number, input_forcing, max_download_attempts, download_attempt_interval, check_file_availability):
         """
         Initialize downloader with common configuration.
 
@@ -52,6 +52,9 @@ class ForecastDownloader(ABC):
         :param lagback_hours: How many hours to lag before starting to fetch
         :param ens_number: The ensemble number for a given operational model
         :param input_forcing: The integer based value of a specific operational model in forcing engine
+        :param max_download_attempts: How many attempts do you want make for downloading a forcing file
+        :param download_attempt_interval: The number of seconds you want to wait between each attempt to download a forcing file after a failure
+        :param check_file_availability: An integer value that indicates whether or not to defer to just checking file availability rather than downloading files
         """
         if lookback_hours <= lagback_hours:
             raise ValueError(
@@ -66,7 +69,10 @@ class ForecastDownloader(ABC):
         self.lagback_hours = lagback_hours
         self.ens_number = ens_number
         self.input_forcing = input_forcing
-
+        self.max_download_attempts = max_download_attempts
+        self.download_attempt_interval = download_attempt_interval
+        self.check_file_availability = check_file_availability
+        
         # Current hour, rounded to the top of the hour in UTC
         self.d_now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
@@ -111,6 +117,9 @@ class ForecastDownloader(ABC):
         parser.add_argument('--lagBackHours', type=int, default=cls.default_lagback)
         parser.add_argument('--ensNumber', type=int, default=None)
         parser.add_argument('--inputforcing', type=int)
+        parser.add_argument('--max_download_attempts', type=int, default=10,help="Number of attempts to download a file.")
+        parser.add_argument('--download_attempt_interval', type=int, default=30,help="How many seconds do you wait until you attempt to retry downloading a file that failed.")
+        parser.add_argument('--check_file_availability', type=int, default=0, help="Bypass file downloading and just check to see if files are available to download. To implement specify 1, or omit you specify 0. Default is 0.")        
         args = parser.parse_args()
 
         print(f"{cls.__name__} args:", vars(args))
@@ -122,15 +131,21 @@ class ForecastDownloader(ABC):
             cleanback_hours=args.cleanBackHours,
             lagback_hours=args.lagBackHours,
             ens_number=args.ensNumber,
-            input_forcing=args.inputforcing
+            input_forcing=args.inputforcing,
+            max_download_attempts=args.max_download_attempts,
+            download_attempt_interval=args.download_attempt_interval,
+            check_file_availability=args.check_file_availability
         )
 
     def run(self):
         """
-        Main method that orchestrates lock acquisition, cleanup, and downloading.
+        Main method that orchestrates lock acquisition, cleanup, and downloading OR just check availability of forcing files.
         """
-        self._cleanup_old_data()
-        self._download_data()
+        if(self.check_file_availability==1):
+            self._check_data_availability()
+        else:
+            self._cleanup_old_data()
+            self._download_data()
 
     #
     # --- Abstract methods to override in subclass ---
@@ -316,8 +331,8 @@ class ForecastDownloader(ABC):
           - no partial files ever appear at the final path
           - atomic, race-proof behavior without lock files
         """
-        max_attempts = 10
-        interval = 30  # seconds
+        max_attempts = self.max_download_attempts
+        interval = self.download_attempt_interval  # seconds
         attempt = 0
 
         # Directory and base name for temp file
@@ -398,6 +413,129 @@ class ForecastDownloader(ABC):
         LOG.error(f"Failed to download after {max_attempts} attempts: {url}")
         return
 
+    def _check_data_availability(self):
+        """
+        Check forecast file availability across the desired time range and targets.
+        Tracks and logs the total count of available files discovered.
+        """
+        LOG.info(f"ForecastDownloader: Checking data availability. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
+
+        # Global counters for the entire run
+        total_files_checked = 0
+        available_files_count = 0
+
+        for hour in range(self.lookback_hours, self.effective_lagback(), -1):
+            d_start = self.start_time - timedelta(hours=hour)
+
+            if self.should_process_hour(d_start):
+                LOG.debug(f"Processing hour offset: {hour}, timestamp: {d_start}")
+            else:
+                LOG.debug(f"Skipping hour offset: {hour}, timestamp: {d_start}")
+                continue
+
+
+            self.pre_download_hook(d_start)
+
+            targets = self.get_download_targets(d_start)
+            all_files_available = True  # Track status for this specific timestamp block
+
+            # Special RAP case where build_file_url_and_name returns a list of (url, filename)
+            if self.input_forcing == 6:
+                for target in targets:
+                    file_list = self.build_file_url_and_name(d_start, target, self.ens_number)
+
+                    for url, filename in file_list:
+                        total_files_checked += 1
+                        LOG.info(f"Checking upstream availability for {filename} via HEAD request")
+
+                        if self._check_file_availability(url):
+                            available_files_count += 1
+                        else:
+                            all_files_available = False
+                            LOG.warning(f"Required file missing from server: {url}")
+
+            # Standard models returning a single (url, filename) tuple
+            else:
+                for target in targets:
+                    url, filename = self.build_file_url_and_name(d_start, target, self.ens_number)
+                    total_files_checked += 1
+                    LOG.info(f"Checking upstream availability for {filename} via HEAD request")
+
+                    if self._check_file_availability(url):
+                        available_files_count += 1
+                    else:
+                        all_files_available = False
+                        LOG.warning(f"Required file missing from server: {url}")
+
+            # Post-download hook handling based on timestamp block completeness
+            if all_files_available:
+                LOG.info(f"All required forcing files are available for timestamp: {d_start}")
+                self.post_download_hook(d_start)
+            else:
+                LOG.error(f"One or more forcing files missing for timestamp: {d_start}. Post-download hook skipped.")
+
+        # Final summary metrics logged after the outer loop finishes completely
+        LOG.info(f"--- Forcing Availability Verification Summary ---")
+        LOG.info(f"Total files checked: {total_files_checked}")
+        LOG.info(f"Total files available on server: {available_files_count}")
+
+        if available_files_count == total_files_checked:
+            LOG.info("Verification complete: 100% of requested files are available upstream.")
+        else:
+            missing_count = total_files_checked - available_files_count
+            LOG.warning(f"Verification complete: {missing_count} file(s) are currently missing from the server.")
+
+    # noinspection PyMethodMayBeStatic
+    def _check_file_availability(self, url):
+        """
+        Ping the server using an HTTP HEAD request to check if the file is available.
+
+        Returns:
+            bool: True if the file exists (HTTP 200), False if it does not (404) or fails.
+        """
+        max_attempts = self.max_download_attempts
+        interval = self.download_attempt_interval  # seconds
+        attempt = 0
+
+        while attempt < max_attempts:
+            try:
+                LOG.info(f"Attempt {attempt + 1}: Pinging {url} for availability...")
+
+                # Send an HTTP HEAD request with a reasonable timeout
+                response = requests.head(url, timeout=10)
+
+                # If status code is 200, the file is ready
+                if response.status_code == requests.codes.ok:  # status_code == 200
+                    LOG.info(f"File is available: {url}")
+                    return True
+
+                elif response.status_code == 404:
+                    LOG.warning(f"File not found (404): {url}")
+                    return False
+
+                else:
+                    LOG.error(f"Server returned status code {response.status_code} while pinging {url}")
+
+            except requests.exceptions.Timeout:
+                # Handle connection or read timeouts gracefully
+                LOG.error(f"Timeout occurred while trying to connect to {url}")
+
+            except requests.exceptions.ConnectionError:
+                # Handle DNS failures, refused connections, or network drops
+                LOG.error(f"ConnectionError (Network issue) while pinging {url}")
+
+            except requests.exceptions.RequestException as e:
+                # Catch-all for any other anomalous Requests-related errors
+                LOG.error(f"An error occurred with the request: {e}")
+
+            attempt += 1
+
+            # Only sleep if we have remaining attempts left
+            if attempt < max_attempts:
+                time.sleep(interval)
+
+        LOG.error(f"Failed to confirm file availability after {max_attempts} attempts: {url}")
+        return False
 
 class FixedFileDownloader(ForecastDownloader, ABC):
     """
@@ -447,36 +585,17 @@ class FixedFileDownloader(ForecastDownloader, ABC):
 
                 self._download_file(url, out_path)
 
+    def _check_data_availability(self):
+        """
+        Check fixed file availability across the desired time range and specifications.
+        Instead of downloading, this validates if the files are available on the remote server.
+        """
+        LOG.info(f"FixedFileDownloader: Checking data availability. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
 
-class ScrapedFileDownloader(ForecastDownloader, ABC):
-    # No longer used, but keeping just in case
-    """
-    Subclass for forecast datasets that must scrape an HTML directory to discover files.
+        # Initialize global counters for the entire verification run
+        total_files_checked = 0
+        available_files_count = 0
 
-    Intended for sources like NBM, where forecast files are published dynamically and filenames
-    may vary by cycle.
-
-    Subclasses must implement:
-    - get_scrape_url(d_start): returns the remote URL to scrape for a specific timestamp
-    - filter_url(url): returns True for valid files to download (e.g., endswith ".hi.grib2")
-    """
-
-    @abstractmethod
-    def get_scrape_url(self, d_start):
-        pass
-
-    @abstractmethod
-    def filter_url(self, url: str) -> bool:
-        pass
-
-    def get_download_targets(self, _):
-        return [0]  # Satisfy the abstract method; not used for scraping
-
-    def build_file_url_and_name(self, d_start, target):
-        raise NotImplementedError("ScrapedFileDownloader uses scraping logic instead of build_file_url_and_name().")
-
-    def _download_data(self):
-        LOG.info(f"ScrapedFileDownloader: Download data. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
         for hour in range(self.lookback_hours, self.effective_lagback(), -1):
             d_start = self.start_time - timedelta(hours=hour)
 
@@ -486,21 +605,29 @@ class ScrapedFileDownloader(ForecastDownloader, ABC):
                 LOG.debug(f"Skipping hour offset: {hour}, timestamp: {d_start}")
                 continue
 
-            url = self.get_scrape_url(d_start)
-            LOG.info(f"Scraping: {url}")
-            output_dir = self.build_output_dir(d_start)
-            os.makedirs(output_dir, exist_ok=True)
+            # Loop through the files defined for this timestamp
+            for subdir, filename in self.get_file_specs(d_start):
+                total_files_checked += 1
 
-            html = requests.get(url).text
-            soup = BeautifulSoup(html, "html.parser")
-            for a in soup.find_all("a"):
-                href = a.get("href", "")
-                full_url = os.path.join(url, href)
-                if self.filter_url(full_url):
-                    out_path = os.path.join(output_dir, os.path.basename(full_url))
+                # Construct the upstream URL to ping
+                url = os.path.join(self.base_url, subdir, filename)
 
-                    if os.path.isfile(out_path):
-                        LOG.debug(f"Skipping existing: {out_path}")
-                        continue
+                LOG.info(f"Checking upstream availability for {subdir}/{filename} via HEAD request")
 
-                    self._download_file(full_url, out_path)
+                # Use the requests-based ping method to check server presence
+                if self._check_file_availability(url):
+                    available_files_count += 1
+                else:
+                    LOG.warning(f"Required file missing from server: {url}")
+
+        # Final summary metrics logged after scanning all hours and file specs
+        LOG.info(f"--- Fixed File Availability Verification Summary ---")
+        LOG.info(f"Total files checked: {total_files_checked}")
+        LOG.info(f"Total files available on server: {available_files_count}")
+
+        if available_files_count == total_files_checked:
+            LOG.info("Verification complete: 100% of requested fixed files are available upstream.")
+        else:
+            missing_count = total_files_checked - available_files_count
+            LOG.warning(f"Verification complete: {missing_count} fixed file(s) are currently missing from the server.")
+            
