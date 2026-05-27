@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import sys
 import shutil
 import time
 import uuid
@@ -11,13 +12,13 @@ from urllib import request, error
 import requests
 from bs4 import BeautifulSoup
 
-from nextgen_forcings_ewts import MODULE_NAME
+logging.basicConfig(
+    level=logging.INFO,
+    stream=sys.stdout, # Forces it to use standard output instead of standard error
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
-LOG = logging.getLogger(MODULE_NAME)
-if not LOG.handlers:
-    # No handlers attached — fallback to default root logger
-    logging.basicConfig()
-    LOG = logging.getLogger()
+LOG = logging.getLogger()
 
 
 class ForecastDownloader(ABC):
