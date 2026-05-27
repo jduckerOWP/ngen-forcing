@@ -8,6 +8,7 @@ example usage: python bmi_wrapper.py short_range Gage_01011000.gpkg
 
 import argparse
 import os
+import time
 import tempfile
 import subprocess
 from datetime import datetime, timedelta
@@ -54,6 +55,21 @@ def execute(forcing_config_input: str, config_input: str = None):
                                geogrid=forcing_config['GeogridIn'],
                                parquet=config['global']['parquet_path'])
 
+    # Look for optional arguments with user controls on file
+    # downloading mechanisms or just wanting to check data availability
+    try: 
+        max_download_attempts = forcing_config['max_download_attempts']
+    except: 
+        max_download_attempts = 10
+    try:
+        download_attempt_interval = forcing_config['download_attempt_interval']
+    except:
+        download_attempt_interval = 30
+    try:
+        check_file_availability = forcing_config['check_file_availability']
+    except:
+        check_file_availability = 0
+        
     # Wrap config dict into simplenamespace to match forcing extraction ConfigOptions format
     extract_cfg = SimpleNamespace(b_date_proc=datetime.strptime(forcing_config['RefcstBDateProc'], "%Y%m%d%H%M"),
                                   input_forcings=forcing_config['InputForcings'],
@@ -63,13 +79,28 @@ def execute(forcing_config_input: str, config_input: str = None):
                                   fcst_input_horizons=forcing_config['ForecastInputHorizons'],
                                   cfsv2EnsMember=forcing_config['cfsEnsNumber'],
                                   ana_flag=forcing_config['AnAFlag'],
-                                  look_back=forcing_config['LookBack'])
+                                  look_back=forcing_config['LookBack'],
+                                  max_download_attempts=max_download_attempts,
+                                  download_attempt_interval=download_attempt_interval,
+                                  check_file_availability=check_file_availability)
+
+    start = time.perf_counter()
 
     # Create mesh file
     esmf_creation.create_mesh(esmf_cfg)
 
+    end = time.perf_counter()
+
+    print(f"Time taken for ESMF mesh production: {end - start:.6f} seconds")
+
+    start = time.perf_counter()
+
     # Extract forcing
     forcing_extraction.retrieve_forcing(extract_cfg)
+
+    end = time.perf_counter()
+
+    print(f"Time taken for forcing file extraction: {end - start:.6f} seconds")
 
 def main():
     """
