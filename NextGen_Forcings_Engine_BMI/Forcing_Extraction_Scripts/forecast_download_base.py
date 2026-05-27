@@ -411,8 +411,9 @@ class ForecastDownloader(ABC):
             time.sleep(interval)
 
         LOG.error(f"Failed to download after {max_attempts} attempts: {url}")
-        return
-
+        LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
+        os._exit(1)
+        
     def _check_data_availability(self):
         """
         Check forecast file availability across the desired time range and targets.
@@ -535,8 +536,9 @@ class ForecastDownloader(ABC):
                 time.sleep(interval)
 
         LOG.error(f"Failed to confirm file availability after {max_attempts} attempts: {url}")
-        return False
-
+        LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
+        os._exit(1)
+        
 class FixedFileDownloader(ForecastDownloader, ABC):
     """
     Subclass for forecast datasets that consist of one or more fixed files per cycle.
