@@ -6,8 +6,7 @@ from types import SimpleNamespace
 from pathlib import Path
 from Forcing_Extraction_Scripts.forecast_download_base import (
     ForecastDownloader,
-    FixedFileDownloader,
-    ScrapedFileDownloader,
+    FixedFileDownloader
 )
 
 
@@ -35,6 +34,21 @@ def retrieve_forcing(cfg: "ConfigOptions"):
     look_back = cfg.look_back
     extraction_scriptPath = "./Forcing_Extraction_Scripts"
 
+    # Look for optional arguments with user controls on file
+    # downloading mechanisms or just wanting to check data availability
+    try:
+        max_download_attempts = cfg.max_download_attempts
+    except:
+        max_download_attempts = 10
+    try:
+        download_attempt_interval = cfg.download_attempt_interval
+    except:
+        download_attempt_interval = 30
+    try:
+        check_file_availability = cfg.check_file_availability
+    except:
+        check_file_availability = 0
+        
     # Set mapping between InputForcings codes and forcing extraction scripts
     forcing_src = {
         3: "Global/get_prod_GFS.py",
@@ -45,6 +59,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
         14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico.py",
         19: "Alaska/get_Alaska_HRRR.py",
         24: "CONUS/get_prod_NBM_Conus.py",
+        26: "CONUS/get_conus_HRRR_subhourly.py",
         "supp8": "CONUS/get_prod_NBM_Conus.py",
         "supp9": "Alaska/get_prod_NBM_Alaska.py",
         "supp11": "Alaska/get_Alaska_StageIV.py",
@@ -110,7 +125,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
         spec.loader.exec_module(module)
 
         # Retrieve correct ForecastDownloader subclass from extraction script
-        base_classes = (ForecastDownloader, FixedFileDownloader, ScrapedFileDownloader)
+        base_classes = (ForecastDownloader, FixedFileDownloader)
         downloader_class = next(
             obj
             for name, obj in vars(module).items()
@@ -142,6 +157,9 @@ def retrieve_forcing(cfg: "ConfigOptions"):
             lagback_hours=0,
             ens_number=int(ens_number) if ens_number not in ("", None) else None,
             input_forcing=input_forcings[i],
+            max_download_attempts=max_download_attempts,
+            download_attempt_interval=download_attempt_interval,
+            check_file_availability=check_file_availability,
         )
 
         # Run the download
