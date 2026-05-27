@@ -3,14 +3,13 @@ import os
 from types import SimpleNamespace
 
 import yaml
-from NextGen_Forcings_Engine.core.config import ConfigOptions
 
 from ESMF_Mesh_Domain_Configuration_Production.NextGen_hyfab_to_ESMF_Mesh import (
     convert_hyfab_to_esmf,
 )
 
 
-def create_mesh(cfg: ConfigOptions):
+def create_mesh(cfg: "ConfigOptions"):
     """Create ESMF Mesh from geopackage file provided by the forcing engine config.
 
     :param cfg: Object with attributes:
