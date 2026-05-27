@@ -33,11 +33,11 @@ date
 
 #------------------------------------------------------------
 # Run the program
-srun -n 1 $PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/standard_ana_config.yml
-#srun -n 1 $PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/extended_ana_config.yml
-#srun -n 1 $PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/short_range_config.yml
-#srun -n 1 $PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/medium_range_blend_config.yml
-#srun -n 1 $PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/long_range_mem1_config.yml
+$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/standard_ana_config.yml
+#$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/extended_ana_config.yml
+#$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/short_range_config.yml
+#$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/medium_range_blend_config.yml
+#$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/long_range_mem1_config.yml
 
 echo -n "End time: "
 date
