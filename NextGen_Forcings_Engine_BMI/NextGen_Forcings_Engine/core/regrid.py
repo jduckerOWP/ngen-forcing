@@ -117,6 +117,65 @@ def create_link(name, input_file, tmpFile, config_options, mpi_config):
             err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
 
+def get_subhourly_avg(input_forcings,var,id_tmp,id_tmp2):
+
+    # If sub-hourly cycling is 15, 30, or 45 minutes
+    if(len(input_forcings.file_in2_indices) != 0):
+
+        # Open the HRRR datasets between sub-hourly forecast hour
+        ds1 = xr.open_dataset(id_tmp)
+        ds2 = xr.open_dataset(id_tmp2)
+
+        # Extract only the specific variable requested
+        da1_var = ds1[var]
+        da2_var = ds2[var]
+
+        # Subset the data using integer-position indexing along the time dimension
+        da1_subset = da1_var.isel(time=input_forcings.file_in1_indices)
+        da2_subset = da2_var.isel(time=input_forcings.file_in2_indices)
+
+        # Concatenate the two subsets together along the time axis
+        combined_series = xr.concat([da1_subset, da2_subset], dim='time')
+
+        if var != "APCP":
+            # Calculate the temporal mean across the concatenated time index
+            spatial_avg = combined_series.mean(dim='time', keep_attrs=True)
+        else:
+            # Calculate the sum for precipitation accumulation fields across the concatenated time index
+            spatial_avg = combined_series.sum(dim='time', keep_attrs=True)
+
+        # Compute the data into memory and extract the raw 2D array underlying it
+        spatial_avg_computed = spatial_avg.compute().values
+
+        # Close datasets to free up system file handles safely
+        ds1.close()
+        ds2.close()
+
+    # We only need one HRRR-subhourly file for 00 minute sub-hourly cycle
+    else:
+        # Open single HRRR sub-hourly file for current forecast hour
+        ds1 = xr.open_dataset(id_tmp)
+
+        # Extract only the specific variable requested
+        da1_var = ds1[var]
+
+        # Subset the data using integer-position indexing along the time dimension
+        da1_subset = da1_var.isel(time=input_forcings.file_in1_indices)
+
+        if var != "APCP":
+            # Calculate the temporal mean across the concatenated time index
+            spatial_avg = combined_series.mean(dim='time', keep_attrs=True)
+        else:
+            # Calculate the sum for precipitation accumulation fields across the concatenated time index
+            spatial_avg = combined_series.sum(dim='time', keep_attrs=True)
+
+        # Compute the data into memory and extract the raw 2D array underlying it
+        spatial_avg_computed = spatial_avg.compute().values
+
+        # Close datasets to free up system file handles safely
+        ds1.close()
+
+    return spatial_avg_computed
 
 @dask.delayed
 def compute(id_tmp, nc_var):
