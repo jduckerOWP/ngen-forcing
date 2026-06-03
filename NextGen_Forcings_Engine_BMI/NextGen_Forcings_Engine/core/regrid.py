@@ -3622,6 +3622,31 @@ def regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_con
                 err_handler.log_critical(config_options, mpi_config)
         err_handler.check_program_status(config_options, mpi_config)
 
+        if mpi_config.rank == 0 and id_tmp2 is not None:
+            try:
+                id_tmp2.close()
+            except Exception as e:
+                config_options.errMsg = (
+                    f"Unable to close NetCDF file: {input_forcings.tmpFile2} - {e}\n"
+                    f"{traceback.format_exc()}"
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            try:
+                os_utils.os_remove_retry(input_forcings.tmpFile2)
+            except FileNotFoundError:
+                # File doesn't exist
+                config_options.statusMsg = (
+                    f"NetCDF file not found, continuing: {input_forcings.tmpFile2}"
+                )
+                err_handler.log_warning(config_options, mpi_config)
+            except Exception as e:
+                # Any other exception is critical
+                config_options.errMsg = (
+                    f"Unable to remove NetCDF file: {input_forcings.tmpFile2} - {e}\n"
+                    f"{traceback.format_exc()}"
+                )
+                err_handler.log_critical(config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
 
 def regrid_cfsv2(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
     """Regrid global CFSv2 forecast data.
