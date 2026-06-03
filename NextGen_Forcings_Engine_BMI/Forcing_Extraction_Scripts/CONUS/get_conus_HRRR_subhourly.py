@@ -31,7 +31,6 @@ class HRRRSubhourlyDownloader(ForecastDownloader):
         return os.path.join(
             self.out_dir,
             f"hrrr.{d_current.strftime('%Y%m%d')}",
-            d_current.strftime('%H'),
             "subhourly"
         )
 
@@ -40,7 +39,7 @@ class HRRRSubhourlyDownloader(ForecastDownloader):
         hour = d_current.strftime('%H')
         date = d_current.strftime('%Y%m%d')
         filename = f"hrrr.t{hour}z.wrfsubhf{fhr_str}.grib2"
-        url = os.path.join(self.base_url, f"hrrr.{date}", "subhourly", filename)
+        url = os.path.join(self.base_url, f"hrrr.{date}", "conus", filename)
         return url, filename
 
 
