@@ -4609,10 +4609,10 @@ def find_hourly_mrms_precip_flag(
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
 
 
-def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
-    """Find input neighbor files.
+def find_conus_hrrr_15min_neighbors(input_forcings, config_options, d_current, mpi_config):
+    """Find HRRR 15-min subhourly neighbor files.
 
-    Function to calculate the previous and after custom freq input cycles based on the current timestep.
+    Function to calculate the previous and next input files for HRRR sub-hourly grib2 files based on the current timestep.
     :param input_forcings:
     :param config_options:
     :param d_current:
@@ -4654,18 +4654,58 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
     dt_tmp = d_current - current_input_cycle
     # current_input_hour = int(dt_tmp.days * 24) + int(dt_tmp.seconds / 3600.0)
     current_input_min = int(dt_tmp.seconds / 60.0)
+
+    if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+        # Set cycling to remain hourly
+        min_since_last_output = input_forcings.cycle_freq
+
+        # Assign netcdf4 indices based on the 15-minute hourly HRRR
+        # cycling we need to process between input files 1 and 2
+        if d_current.minute == 0:
+            input_forcings.file_in1_indices = [0,1,2,3]
+            input_forcings.file_in2_indices = []
+        elif d_current.minute == 15:
+            input_forcings.file_in1_indices = [1,2,3]
+            input_forcings.file_in2_indices = [0]
+        elif d_current.minute == 30:
+            input_forcings.file_in1_indices = [2,3]
+            input_forcings.file_in2_indices = [0,1]
+        elif d_current.minute == 45:
+            input_forcings.file_in1_indices = [3]
+            input_forcings.file_in2_indices = [0,1,2]
+    else:
+        # Keep logic for hourly HRRR and 15-minute HRRR cycle frequency
+        min_since_last_output = current_input_min % input_forcings.cycle_freq
+
+
     # Calculate the previous file to process.
     min_since_last_output = current_input_min % input_forcings.cycle_freq
     if min_since_last_output == 0:
         min_since_last_output = input_forcings.cycle_freq
-    prev_input_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
+
+    # previous input date is the current forecast hour
+    if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+        prev_input_date = d_current
+    else:
+        # Otherwise, previous current date is back in time from forecast hour based on cycling frequency
+        prev_input_date = d_current - datetime.timedelta(seconds=min_since_last_output * 60)
+
     input_forcings.fcst_date1 = prev_input_date
+
     if min_since_last_output == input_forcings.cycle_freq:
         min_until_next_output = 0
     else:
         min_until_next_output = input_forcings.cycle_freq - min_since_last_output
-    next_input_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
+
+    # Next input date is one hour ahead of the current forecast hour
+    if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+        next_input_date = d_current + datetime.timedelta(seconds=min_since_last_output * 60)
+    else:
+        # Otherwise, next input date is based on the current forecast hour plus cycling frequency in time
+        next_input_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
+
     input_forcings.fcst_date2 = next_input_date
+
     dt_tmp = next_input_date - current_input_cycle
     next_input_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
     input_forcings.fcst_hour2 = next_input_forecast_hour
@@ -4690,6 +4730,11 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
                 dt_tmp.seconds / 60.0
             ) % 60
         input_forcings.fcst_min2 = next_input_forecast_min
+
+    # Ensure the forecast minute remains the cycling sub-hourly minute
+    if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+        input_forcings.fcst_min2 = current_input_cycle.minute
+
     dt_tmp = prev_input_date - current_input_cycle
     prev_input_forecast_hour = int(dt_tmp.days * 24.0) + int(dt_tmp.seconds / 3600.0)
     input_forcings.fcst_hour1 = prev_input_forecast_hour
@@ -4701,6 +4746,10 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
         ) % 60
         input_forcings.fcst_min1 = prev_input_forecast_min
 
+    # Ensure the forecast minute remains the cycling sub-hourly minute
+    if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+        input_forcings.fcst_min1 = current_input_cycle.minute
+
     err_handler.check_program_status(config_options, mpi_config)
 
     if config_options.ana_flag == 1:
@@ -4709,7 +4758,7 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
     if config_options.ana_flag == 0:
         # Calculate expected file paths.
         pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
-        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/conus/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
+        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/subhourly/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
 
         files1 = glob.glob(pattern1) + glob.glob(pattern2)
         tmp_file1 = files1[0]
@@ -4718,7 +4767,7 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
             err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
 
         pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(next_input_forecast_hour).zfill(2)}.grib2"
-        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/conus/*{current_input_cycle.strftime('%H')}z*{str(next_input_forecast_hour).zfill(2)}.grib2"
+        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/subhourly/*{current_input_cycle.strftime('%H')}z*{str(next_input_forecast_hour).zfill(2)}.grib2"
 
         files2 = glob.glob(pattern1) + glob.glob(pattern2)
 
@@ -4731,7 +4780,7 @@ def find_input_neighbors(input_forcings, config_options, d_current, mpi_config):
     elif config_options.ana_flag == 1:
         # Calculate expected file paths.
         pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
-        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/conus/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
+        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/subhourly/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
 
         files1 = glob.glob(pattern1) + glob.glob(pattern2)
 
