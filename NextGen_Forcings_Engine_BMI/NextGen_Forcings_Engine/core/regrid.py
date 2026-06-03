@@ -1643,6 +1643,14 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
 
     # If the expected file is missing, this means we are allowing missing files, simply
     # exit out of this routine as the regridded fields have already been set to NDV.
+    if not os.path.isfile(input_forcings.file_in1) and input_forcings.product_name == "HRRR_15min":
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "No HRRR file_in1 file found for this timestep."
+            err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+        return
+
+    # If the expected file is missing, this means we are allowing missing files, simply
+    # exit out of this routine as the regridded fields have already been set to NDV.
     if not os.path.isfile(input_forcings.file_in2):
         if mpi_config.rank == 0:
             config_options.statusMsg = "No HRRR file_in2 file found for this timestep."
@@ -1665,7 +1673,15 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
         Path(config_options.scratch_dir) / f"{file_uuid}_{file_name}"
     )
 
+    if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+        file_name = f"HRRR_CONUS_TMP2-{mkfilename()}.nc"
+        file_uuid = str(mpi_config.uid64)
+        input_forcings.tmpFile2 = str(
+            Path(config_options.scratch_dir) / f"{file_uuid}_{file_name}"
+        )
+
     id_tmp = None
+    id_tmp2 = None
     try:
         config_options.statusMsg = "Regrid CONUS HRRR"
         err_handler.log_msg(config_options, mpi_config)
@@ -1683,6 +1699,20 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                 except OSError:
                     config_options.errMsg = (
                         f"Unable to remove temporary file: {input_forcings.tmpFile}"
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            if mpi_config.rank == 0 and os.path.isfile(input_forcings.tmpFile2) and input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                config_options.statusMsg = (
+                    f"Found old temporary file: {input_forcings.tmpFile2} - Removing..."
+                )
+                err_handler.log_warning(config_options, mpi_config)
+                try:
+                    os_utils.os_remove_retry(input_forcings.tmpFile2)
+                except OSError:
+                    config_options.errMsg = (
+                        f"Unable to remove temporary file: {input_forcings.tmpFile2}"
                     )
                     err_handler.log_critical(config_options, mpi_config)
             err_handler.check_program_status(config_options, mpi_config)
@@ -1709,15 +1739,24 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                         if grib_var == "APCP"
                         else f"{input_forcings.fcst_hour2} hour fcst"
                     )
-                fields.append(
-                    ":"
-                    + grib_var
-                    + ":"
-                    + input_forcings.grib_levels[force_count]
-                    + ":"
-                    + time_str
-                    + ":"
-                )
+                if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                    fields.append(
+                        ":("
+                        + grib_var
+                        + "):("
+                        + input_forcings.grib_levels[force_count]
+                        + "):"
+                    )
+                else:
+                    fields.append(
+                        ":"
+                        + grib_var
+                        + ":"
+                        + input_forcings.grib_levels[force_count]
+                        + ":"
+                        + time_str
+                        + ":"
+                    )
             fields.append(":(HGT):(surface):")
 
             # Create a temporary NetCDF file from the GRIB2 file.
@@ -1737,6 +1776,27 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                 special_case=False,
             )
             err_handler.check_program_status(config_options, mpi_config)
+
+            if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                # Create a temporary NetCDF file from the GRIB2 file.
+                if WGRIB2_env:
+                    pattern = "|".join(fields)
+                    cmd = f'$WGRIB2 -match "({pattern})" {input_forcings.file_in1} -netcdf {input_forcings.tmpFile2}'
+                else:
+                    cmd = "(" + "|".join(fields) + ")"
+
+                id_tmp2 = ioMod.open_grib2(
+                    input_forcings.file_in1,
+                    input_forcings.tmpFile2,
+                    cmd,
+                    config_options,
+                    mpi_config,
+                    inputVar=None,
+                    special_case=False,
+                )
+
+                err_handler.check_program_status(config_options, mpi_config)
+
         else:
             create_link(
                 "HRRR",
@@ -1800,6 +1860,8 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                         try:
                             if 0 < input_forcings.cycle_freq < 60:
                                 var_tmp = id_tmp.variables["HGT_surface"][sub_id]
+                            elif input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                                var_tmp = get_subhourly_avg(input_forcings,"HGT_surface",input_forcings.tmpFile2,input_forcings.tmpFile)
                             else:
                                 var_tmp = id_tmp.variables["HGT_surface"][0, :, :]
                         except (ValueError, KeyError, AttributeError) as err:
@@ -1878,6 +1940,8 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                         try:
                             if 0 < input_forcings.cycle_freq < 60:
                                 var_tmp = id_tmp.variables["HGT_surface"][sub_id]
+                            elif input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                                var_tmp = get_subhourly_avg(input_forcings,"HGT_surface",input_forcings.tmpFile2,input_forcings.tmpFile)
                             else:
                                 var_tmp = id_tmp.variables["HGT_surface"][0, :, :]
                         except (ValueError, KeyError, AttributeError) as err:
@@ -1953,7 +2017,12 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                     var_tmp_elem = None
                     if mpi_config.rank == 0:
                         try:
-                            var_tmp_elem = id_tmp.variables["HGT_surface"][0, :, :]
+                            if 0 < input_forcings.cycle_freq < 60:
+                                var_tmp_elem = id_tmp.variables["HGT_surface"][sub_id]
+                            elif input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                                var_tmp_elem = get_subhourly_avg(input_forcings,"HGT_surface",input_forcings.tmpFile2,input_forcings.tmpFile)
+                            else:
+                                var_tmp_elem = id_tmp.variables["HGT_surface"][0, :, :]
                         except (ValueError, KeyError, AttributeError) as err:
                             config_options.errMsg = (
                                 "Unable to extract HRRR elevation from "
@@ -2032,6 +2101,8 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                         try:
                             if 0 < input_forcings.cycle_freq < 60:
                                 var_tmp = id_tmp.variables["HGT_surface"][sub_id]
+                            elif input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                                var_tmp = get_subhourly_avg(input_forcings,"HGT_surface",input_forcings.tmpFile2,input_forcings.tmpFile)
                             else:
                                 var_tmp = id_tmp.variables["HGT_surface"][0, :, :]
                         except (ValueError, KeyError, AttributeError) as err:
@@ -2134,6 +2205,8 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                             var_tmp = id_tmp.variables[
                                 input_forcings.netcdf_var_names[force_count]
                             ][sub_id, :, :]
+                        elif input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                            var_tmp = get_subhourly_avg(input_forcings,input_forcings.netcdf_var_names[force_count],input_forcings.tmpFile2,input_forcings.tmpFile)
                         else:
                             var_tmp = id_tmp.variables[
                                 input_forcings.netcdf_var_names[force_count]
@@ -2256,6 +2329,8 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                             var_tmp = id_tmp.variables[
                                 input_forcings.netcdf_var_names[force_count]
                             ][sub_id, :, :]
+                        elif input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                            var_tmp = get_subhourly_avg(input_forcings,input_forcings.netcdf_var_names[force_count],input_forcings.tmpFile2,input_forcings.tmpFile)
                         else:
                             var_tmp = id_tmp.variables[
                                 input_forcings.netcdf_var_names[force_count]
@@ -2374,6 +2449,8 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                             var_tmp_elem = id_tmp.variables[
                                 input_forcings.netcdf_var_names[force_count]
                             ][sub_id, :, :]
+                        elif input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                            var_tmp_elem = get_subhourly_avg(input_forcings,input_forcings.netcdf_var_names[force_count],input_forcings.tmpFile2,input_forcings.tmpFile)
                         else:
                             var_tmp_elem = id_tmp.variables[
                                 input_forcings.netcdf_var_names[force_count]
@@ -2499,6 +2576,8 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                             var_tmp = id_tmp.variables[
                                 input_forcings.netcdf_var_names[force_count]
                             ][sub_id, :, :]
+                        elif input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                            var_tmp = get_subhourly_avg(input_forcings,input_forcings.netcdf_var_names[force_count],input_forcings.tmpFile2,input_forcings.tmpFile)
                         else:
                             var_tmp = id_tmp.variables[
                                 input_forcings.netcdf_var_names[force_count]
@@ -2633,6 +2712,31 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                 err_handler.log_critical(config_options, mpi_config)
         err_handler.check_program_status(config_options, mpi_config)
 
+        if mpi_config.rank == 0 and id_tmp2 is not None:
+            try:
+                id_tmp2.close()
+            except Exception as e:
+                config_options.errMsg = (
+                    f"Unable to close NetCDF file: {input_forcings.tmpFile2} - {e}\n"
+                    f"{traceback.format_exc()}"
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            try:
+                os_utils.os_remove_retry(input_forcings.tmpFile2)
+            except FileNotFoundError:
+                # File doesn't exist
+                config_options.statusMsg = (
+                    f"NetCDF file not found, continuing: {input_forcings.tmpFile2}"
+                )
+                err_handler.log_warning(config_options, mpi_config)
+            except Exception as e:
+                # Any other exception is critical
+                config_options.errMsg = (
+                    f"Unable to remove NetCDF file: {input_forcings.tmpFile2} - {e}\n"
+                    f"{traceback.format_exc()}"
+                )
+                err_handler.log_critical(config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
 
 def regrid_conus_rap(input_forcings, config_options, wrf_hydro_geo_meta, mpi_config):
     """Regrid CONUS RAP 13km data.
