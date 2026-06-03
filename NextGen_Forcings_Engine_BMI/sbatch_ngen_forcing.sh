@@ -37,6 +37,7 @@ date
 $PYTHON bmi_wrapper.py ./Ensemble_MVP_Config_Files/standard_ana_config.yml -output_path ./Scratch/AnA -np $SLURM_NTASKS
 #$PYTHON bmi_wrapper.py ./Ensemble_MVP_Config_Files/extended_ana_config.yml -output_path ./Scratch/Extended_AnA -np $SLURM_NTASKS
 #$PYTHON bmi_wrapper.py ./Ensemble_MVP_Config_Files/short_range_config.yml -output_path ./Scratch/Short_Range -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./Ensemble_MVP_Config_Files/short_range_subhourly_cycling_config.yml -output_path ./Scratch/Short_Range_SubHourly -np $SLURM_NTASKS
 #$PYTHON bmi_wrapper.py ./Ensemble_MVP_Config_Files/medium_range_blend_config.yml -output_path ./Scratch/Medium_Range -np $SLURM_NTASKS
 #$PYTHON bmi_wrapper.py ./Ensemble_MVP_Config_Files/long_range_mem1_config.yml -output_path ./Scratch/Long_Range -np $SLURM_NTASKS
 

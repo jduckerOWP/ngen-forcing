@@ -36,6 +36,7 @@ date
 $PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/standard_ana_config.yml
 #$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/extended_ana_config.yml
 #$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/short_range_config.yml
+#$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/short_range_subhourly_cycling_config.yml
 #$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/medium_range_blend_config.yml
 #$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/long_range_mem1_config.yml
 
