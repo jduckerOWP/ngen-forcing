@@ -105,6 +105,8 @@ class InputForcings:
         self.ndv = None
         self.file_in1 = None
         self.file_in2 = None
+        self.file_in1_indices = None
+        self.file_in2_indices = None
         self.fcst_hour1 = None
         self.fcst_hour2 = None
         self.fcst_date1 = None
@@ -161,7 +163,7 @@ class InputForcings:
             23: "ERA5",
             24: "NBM",
             25: "NDFD",
-            26: "HRRR_15min",
+            26: "HRRR_CONUS_15min_Cycling",
             27: "NWM",
         }[self.keyValue]
 
@@ -239,7 +241,7 @@ class InputForcings:
                 23: -9999,
                 24: 60,
                 25: 1440,
-                26: 15,
+                26: 60,
                 27: -9999,
             }[self.keyValue]
         return self._cycle_freq
@@ -904,7 +906,7 @@ class InputForcings:
             23: time_handling.find_era5_neighbors,
             24: time_handling.find_hourly_nbm_neighbors,
             25: time_handling.find_ndfd_neighbors,
-            26: time_handling.find_input_neighbors,
+            26: time_handling.find_conus_hrrr_15min_neighbors,
             27: time_handling.find_nwm_neighbors,
         }
 
