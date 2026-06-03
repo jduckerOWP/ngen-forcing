@@ -40,6 +40,7 @@ import dask.delayed
 import netCDF4 as nc
 import numpy as np
 import pandas as pd
+import xarray as xr
 from pyproj import Transformer
 
 from . import (
@@ -150,6 +151,10 @@ def get_subhourly_avg(input_forcings,var,id_tmp,id_tmp2):
         # Close datasets to free up system file handles safely
         ds1.close()
         ds2.close()
+        da1_subset.close()
+        da2_subset.close()
+        combined_series.close()
+        spatial_avg.close()
 
     # We only need one HRRR-subhourly file for 00 minute sub-hourly cycle
     else:
@@ -174,6 +179,9 @@ def get_subhourly_avg(input_forcings,var,id_tmp,id_tmp2):
 
         # Close datasets to free up system file handles safely
         ds1.close()
+        da1_subset.close()
+        combined_series.close()
+        spatial_avg.close()
 
     return spatial_avg_computed
 
