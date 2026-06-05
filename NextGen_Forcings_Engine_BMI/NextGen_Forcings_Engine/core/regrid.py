@@ -1769,7 +1769,7 @@ def regrid_conus_hrrr(input_forcings, config_options, wrf_hydro_geo_meta, mpi_co
                     err_handler.log_critical(config_options, mpi_config)
             err_handler.check_program_status(config_options, mpi_config)
 
-            if mpi_config.rank == 0 and os.path.isfile(input_forcings.tmpFile2) and input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+            if mpi_config.rank == 0 and input_forcings.tmpFile2 is not None and os.path.isfile(input_forcings.tmpFile2) and input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
                 config_options.statusMsg = (
                     f"Found old temporary file: {input_forcings.tmpFile2} - Removing..."
                 )
