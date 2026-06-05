@@ -169,10 +169,10 @@ def get_subhourly_avg(input_forcings,var,id_tmp,id_tmp2):
 
         if var != "APCP":
             # Calculate the temporal mean across the concatenated time index
-            spatial_avg = combined_series.mean(dim='time', keep_attrs=True)
+            spatial_avg = da1_subset.mean(dim='time', keep_attrs=True)
         else:
             # Calculate the sum for precipitation accumulation fields across the concatenated time index
-            spatial_avg = combined_series.sum(dim='time', keep_attrs=True)
+            spatial_avg = da1_subset.sum(dim='time', keep_attrs=True)
 
         # Compute the data into memory and extract the raw 2D array underlying it
         spatial_avg_computed = spatial_avg.compute().values
@@ -180,7 +180,6 @@ def get_subhourly_avg(input_forcings,var,id_tmp,id_tmp2):
         # Close datasets to free up system file handles safely
         ds1.close()
         da1_subset.close()
-        combined_series.close()
         spatial_avg.close()
 
     return spatial_avg_computed
