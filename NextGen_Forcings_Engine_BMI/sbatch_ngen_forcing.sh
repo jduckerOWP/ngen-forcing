@@ -9,6 +9,7 @@
 #SBATCH --error=ngen_forcing_error.log
 #SBATCH --output=ngen_forcing_output.log
 
+#SBATCH --exclusive
 
 module load intel-oneapi-compilers/2025.2.1
 module load intel-oneapi-mpi/2021.16.1
