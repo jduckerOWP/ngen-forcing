@@ -384,11 +384,7 @@ class ForecastDownloader(ABC):
                     return
 
             except error.HTTPError as e:
-                if e.code == 404:
-                    # Permanent upstream error — retries won't fix it
-                    LOG.error(f"File not found (404): {url} - Stopping retries")
-                    return
-                # Other HTTP errors may be temporary; allow the retry loop to continue
+                # HTTP errors may be temporary; allow the retry loop to continue as user requested
                 LOG.error(f"HTTPError {e.code} while downloading {url}: {e.reason}")
 
             except error.URLError as e:
@@ -512,8 +508,7 @@ class ForecastDownloader(ABC):
 
                 elif response.status_code == 404:
                     LOG.warning(f"File not found (404): {url}")
-                    return False
-
+                    
                 else:
                     LOG.error(f"Server returned status code {response.status_code} while pinging {url}")
 
