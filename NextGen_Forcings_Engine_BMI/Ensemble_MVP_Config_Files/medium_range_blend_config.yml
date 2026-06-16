@@ -10,6 +10,7 @@ OutputFrequency: 60
 SubOutputHour: 120
 SubOutFreq: 180
 ScratchDir: "./Scratch/Medium_Range"
+RegridWeightsDir: "./Scratch/Medium_Range"
 Output: 0
 compressOutput: 0
 floatOutput: 0

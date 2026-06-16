@@ -10,6 +10,7 @@ OutputFrequency: 360
 SubOutputHour: 0
 SubOutFreq: 0
 ScratchDir: "./Scratch/Long_Range"
+RegridWeightsDir: "./Scratch/Long_Range"
 Output: 0
 compressOutput: 0
 floatOutput: 0

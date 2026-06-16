@@ -9,7 +9,8 @@ InputMandatory: [1,1]
 OutputFrequency: 60
 SubOutputHour: 0
 SubOutFreq: 0
-ScratchDir: "./Scratch/AnA_Month"
+ScratchDir: "./Scratch/AnA"
+RegridWeightsDir: "./Scratch/AnA"
 Output: 1
 compressOutput: 0
 floatOutput: 0

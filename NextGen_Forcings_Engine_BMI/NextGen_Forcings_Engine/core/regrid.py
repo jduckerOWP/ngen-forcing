@@ -14630,15 +14630,16 @@ def get_weight_file_names(
         return None, None
 
     grid_key = input_forcings.product_name
+    geogrid_key = Path(config_options.geogrid).stem
     file_key = f"{grid_key}_{config_options.geogrid}"
     hash_key = hashlib.md5(file_key.encode()).hexdigest()[:8]
     hash_key += f"_{mpi_config.uid64}"
 
-    weight_file = os.path.join(config_options.weightsDir, f"ESMF_weight_{hash_key}.nc4")
+    weight_file = os.path.join(config_options.weightsDir, f"ESMF_weight_{file_key}.nc4")
 
     if config_options.grid_type == "unstructured":
         weight_file_elem = os.path.join(
-            config_options.weightsDir, f"ESMF_weight_{hash_key}_elem.nc4"
+            config_options.weightsDir, f"ESMF_weight_{file_key}_elem.nc4"
         )
     else:
         weight_file_elem = None

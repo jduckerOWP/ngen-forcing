@@ -10,6 +10,7 @@ OutputFrequency: 60
 SubOutputHour: 0
 SubOutFreq: 0
 ScratchDir: "./Scratch/Short_Range_SubHourly"
+RegridWeightsDir: "./Scratch/Short_Range_SubHourly"
 Output: 1
 compressOutput: 0
 floatOutput: 0
