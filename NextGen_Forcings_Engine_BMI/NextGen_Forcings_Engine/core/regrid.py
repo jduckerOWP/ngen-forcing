@@ -15397,7 +15397,7 @@ def get_weight_file_names(
 
     grid_key = input_forcings.product_name
     geogrid_key = Path(config_options.geogrid).stem
-    file_key = f"{grid_key}_{config_options.geogrid}"
+    file_key = f"{grid_key}_{geogrid_key}"
     hash_key = hashlib.md5(file_key.encode()).hexdigest()[:8]
     hash_key += f"_{mpi_config.uid64}"
 
