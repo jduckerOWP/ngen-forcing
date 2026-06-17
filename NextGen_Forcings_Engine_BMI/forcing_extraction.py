@@ -29,6 +29,16 @@ def retrieve_forcing(cfg: "ConfigOptions"):
     input_horizons = input_horizons + [input_horizons[0]] * len(
         cfg.supp_precip_forcings
     )
+
+    # If we're deferring to MRMS sub-hourly, then we also need to include
+    # data downloading for MRMS hourly data to implement bias correction constraint
+    if "supp16" in input_forcings:
+        index = input_forcings.index('supp16')
+        input_forcings.append("supp2")
+        input_forcing_dirs.append(f"{input_forcing_dirs[index]}/MRMS_Hourly")
+        input_forcing_dirs[index] = f"{input_forcing_dirs[index]}/MRMS_SubHourly"
+        input_horizons.append(input_horizons[index])
+
     ens_number = cfg.cfsv2EnsMember
     ana_flag = cfg.ana_flag
     look_back = cfg.look_back
@@ -82,6 +92,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
         "supp11": "Alaska/get_Alaska_StageIV.py",
         "supp12": "CONUS/get_conus_StageIV.py",
         "supp15": "Puerto_Rico/get_prod_NBM_Puerto_Rico_AnA.py",
+        "supp16": "CONUS/get_conus_MRMS_subhourly.py",
     }
 
     # Extract forcing data from appropriate sources
@@ -99,9 +110,17 @@ def retrieve_forcing(cfg: "ConfigOptions"):
             look_back_hours = 1
             forcing_script = forcing_src.get(input_forcings[i])
             forcing_start_time = refcstbdate + timedelta(hours=1)
+            subhourly_avg = False
         elif ana_flag == 1:
             look_back_hours = int(look_back / 60)
             forcing_start_time = refcstbdate
+
+            if "supp16" in input_forcings and input_forcings[i] in ["supp16","supp2"]:
+                look_back_hours += 1
+                subhourly_avg = True
+            else:
+                subhourly_avg = False
+
             if input_forcings[i] in (
                 "supp1",
                 "supp2",
@@ -109,6 +128,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
                 "supp10",
                 "supp11",
                 "supp12",
+                "supp16",
             ):
                 supp_forcing_hours = 1
             else:
@@ -160,6 +180,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
             max_download_attempts=max_download_attempts,
             download_attempt_interval=download_attempt_interval,
             check_file_availability=check_file_availability,
+            subhourly_avg=subhourly_avg,
         )
 
         # Run the download

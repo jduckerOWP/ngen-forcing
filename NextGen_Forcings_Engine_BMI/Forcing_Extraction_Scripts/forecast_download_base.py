@@ -41,7 +41,7 @@ class ForecastDownloader(ABC):
     default_cleanback = 240
     default_lagback = 6
 
-    def __init__(self, out_dir, start_time, lookback_hours, cleanback_hours, lagback_hours, ens_number, input_forcing, max_download_attempts, download_attempt_interval, check_file_availability):
+    def __init__(self, out_dir, start_time, lookback_hours, cleanback_hours, lagback_hours, ens_number, input_forcing, max_download_attempts, download_attempt_interval, check_file_availability, subhourly_avg):
         """
         Initialize downloader with common configuration.
 
@@ -55,6 +55,7 @@ class ForecastDownloader(ABC):
         :param max_download_attempts: How many attempts do you want make for downloading a forcing file
         :param download_attempt_interval: The number of seconds you want to wait between each attempt to download a forcing file after a failure
         :param check_file_availability: An integer value that indicates whether or not to defer to just checking file availability rather than downloading files
+        :param subhourly_avg: A boolean flag that indicates the forcing data product is being used for sub-hourly averaging, which flags a different check for AnA
         """
         if lookback_hours <= lagback_hours:
             raise ValueError(
@@ -72,7 +73,11 @@ class ForecastDownloader(ABC):
         self.max_download_attempts = max_download_attempts
         self.download_attempt_interval = download_attempt_interval
         self.check_file_availability = check_file_availability
+        self.subhourly_avg = subhourly_avg
         
+        # Self catching mechanism to infer last hour of user download request
+        self.last_hour = None
+
         # Current hour, rounded to the top of the hour in UTC
         self.d_now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
 
@@ -120,6 +125,7 @@ class ForecastDownloader(ABC):
         parser.add_argument('--max_download_attempts', type=int, default=10,help="Number of attempts to download a file.")
         parser.add_argument('--download_attempt_interval', type=int, default=30,help="How many seconds do you wait until you attempt to retry downloading a file that failed.")
         parser.add_argument('--check_file_availability', type=int, default=0, help="Bypass file downloading and just check to see if files are available to download. To implement specify 1, or omit you specify 0. Default is 0.")        
+        parser.add_argument('--subhourly_avg',action="store_true",default=False,help="Indicate that the sub-hourly averaging method is being used for AnA cycle. (default: False)")
         args = parser.parse_args()
 
         print(f"{cls.__name__} args:", vars(args))
@@ -134,7 +140,8 @@ class ForecastDownloader(ABC):
             input_forcing=args.inputforcing,
             max_download_attempts=args.max_download_attempts,
             download_attempt_interval=args.download_attempt_interval,
-            check_file_availability=args.check_file_availability
+            check_file_availability=args.check_file_availability,
+            subhourly_avg=subhourly_avg
         )
 
     def run(self):
@@ -276,6 +283,8 @@ class ForecastDownloader(ABC):
         Each timestamp may have one or more targets to process.
         """
         LOG.info(f"ForecastDownloader: Download data. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
+        # Initalize the last hour of the operational cycle
+        final_hour = self.effective_lagback() + 1
         for hour in range(self.lookback_hours, self.effective_lagback(), -1):
             d_start = self.start_time - timedelta(hours=hour)
 
@@ -291,6 +300,12 @@ class ForecastDownloader(ABC):
             self.pre_download_hook(d_start)
 
             targets = self.get_download_targets(d_start)
+
+            # Set last hour flag based on current hour of cycle
+            if hour == final_hour:
+                self.last_hour = True
+            else:
+                self.last_hour = False
 
             # Flag for special RAP case where we need multiple file types
             if self.input_forcing == 6:
@@ -406,9 +421,15 @@ class ForecastDownloader(ABC):
             attempt += 1
             time.sleep(interval)
 
-        LOG.error(f"Failed to download after {max_attempts} attempts: {url}")
-        LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
-        os._exit(1)
+        # If we're on the last hour and sub-hourly AnA operational scheme is used
+        # then do throw an kill switch as this last file is not absolutely necessary
+        if(self.last_hour and self.subhourly_avg):
+            LOG.warning(f"Failed to download after {max_attempts} attempts: {url}")
+            LOG.warning(f"This MRMS file is not required to fill in the latest AnA cycle hour for sub-hourly averaging method. Will use HRRR instead.")
+        else:
+            LOG.error(f"Failed to download after {max_attempts} attempts: {url}")
+            LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
+            os._exit(1)
         
     def _check_data_availability(self):
         """
@@ -420,6 +441,9 @@ class ForecastDownloader(ABC):
         # Global counters for the entire run
         total_files_checked = 0
         available_files_count = 0
+
+        # Initalize the last hour of the operational cycle
+        final_hour = self.effective_lagback() + 1
 
         for hour in range(self.lookback_hours, self.effective_lagback(), -1):
             d_start = self.start_time - timedelta(hours=hour)
@@ -434,6 +458,13 @@ class ForecastDownloader(ABC):
             self.pre_download_hook(d_start)
 
             targets = self.get_download_targets(d_start)
+
+            # Set last hour flag based on current hour of cycle
+            if hour == final_hour:
+                self.last_hour = True
+            else:
+                self.last_hour = False
+
             all_files_available = True  # Track status for this specific timestamp block
 
             # Special RAP case where build_file_url_and_name returns a list of (url, filename)
@@ -530,9 +561,15 @@ class ForecastDownloader(ABC):
             if attempt < max_attempts:
                 time.sleep(interval)
 
-        LOG.error(f"Failed to confirm file availability after {max_attempts} attempts: {url}")
-        LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
-        os._exit(1)
+        # If we're on the last hour and sub-hourly AnA operational scheme is used
+        # then do throw an kill switch as this last file is not absolutely necessary
+        if(self.last_hour and self.subhourly_avg):
+            LOG.warning(f"Failed to download after {max_attempts} attempts: {url}")
+            LOG.warning(f"This MRMS file is not required to fill in the latest AnA cycle hour for sub-hourly averaging method. Will use HRRR instead.")
+        else:
+            LOG.error(f"Failed to confirm file availability after {max_attempts} attempts: {url}")
+            LOG.critical(f"Script terminating with exit code 1 due to 404 error on {url}")
+            os._exit(1)
         
 class FixedFileDownloader(ForecastDownloader, ABC):
     """
@@ -561,8 +598,16 @@ class FixedFileDownloader(ForecastDownloader, ABC):
 
     def _download_data(self):
         LOG.info(f"FixedFileDownloader: Download data. lookback: {self.lookback_hours} lagback: {self.effective_lagback()}")
+        # Initalize the last hour of the operational cycle
+        final_hour = self.effective_lagback() + 1
         for hour in range(self.lookback_hours, self.effective_lagback(), -1):
             d_start = self.start_time - timedelta(hours=hour)
+
+            # Set last hour flag based on current hour of cycle
+            if hour == final_hour:
+                self.last_hour = True
+            else:
+                self.last_hour = False
 
             if self.should_process_hour(d_start):
                 LOG.debug(f"Processing hour offset: {hour}, timestamp: {d_start}")
@@ -593,8 +638,16 @@ class FixedFileDownloader(ForecastDownloader, ABC):
         total_files_checked = 0
         available_files_count = 0
 
+        # Initalize the last hour of the operational cycle
+        final_hour = self.effective_lagback() + 1
         for hour in range(self.lookback_hours, self.effective_lagback(), -1):
             d_start = self.start_time - timedelta(hours=hour)
+
+            # Set last hour flag based on current hour of cycle
+            if hour == final_hour:
+                self.last_hour = True
+            else:
+                self.last_hour = False
 
             if self.should_process_hour(d_start):
                 LOG.debug(f"Processing hour offset: {hour}, timestamp: {d_start}")
