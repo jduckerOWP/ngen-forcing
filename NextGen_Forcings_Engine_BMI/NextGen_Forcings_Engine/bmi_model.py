@@ -1048,10 +1048,7 @@ class NWMv3_Forcing_Engine_BMI_model(Bmi):
                 # the file name is typically ".nfs" followed by numbers, so we'll just ignore files that start with it
                 if not filename.startswith(".nfs"):
                     file_path = os.path.join(self._job_meta.scratch_dir, filename)
-                    if (
-                        os.path.isfile(file_path)
-                        and filename[0:23] != "NextGen_Forcings_Engine"
-                    ):
+                    if os.path.isfile(file_path) and (not filename.startswith("NextGen_Forcings_Engine") and not filename.startswith("ESMF_weight")):
                         os.remove(file_path)
                     #elif os.path.isdir(file_path):
                     #    os.rmdir(file_path)
