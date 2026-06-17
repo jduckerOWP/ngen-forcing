@@ -34,6 +34,7 @@ date
 #------------------------------------------------------------
 # Run the program
 $PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/standard_ana_config.yml
+#$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/standard_ana_config_subhourly.yml
 #$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/extended_ana_config.yml
 #$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/short_range_config.yml
 #$PYTHON preprocessing_wrapper.py ./Ensemble_MVP_Config_Files/short_range_subhourly_cycling_config.yml
