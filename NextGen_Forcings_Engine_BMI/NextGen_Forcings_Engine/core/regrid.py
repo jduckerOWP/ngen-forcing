@@ -42,6 +42,7 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from pyproj import Transformer
+from scipy.ndimage import gaussian_filter
 
 from . import (
     err_handler,
@@ -117,6 +118,195 @@ def create_link(name, input_file, tmpFile, config_options, mpi_config):
             )
             err_handler.log_critical(config_options, mpi_config)
     err_handler.check_program_status(config_options, mpi_config)
+
+def get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config):
+
+    supplemental_precip.file_in1_grib2 = []
+    # Loop through the MRMS sub-hourly gz files and extract grib2 files
+    for mrms_gzfile in supplemental_precip.file_in1:
+        print(mrms_gzfile)
+        mrms_grib2_name = mrms_gzfile.stem
+        mrms_tmp_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
+        ioMod.unzip_file(mrms_gzfile, mrms_tmp_grib2, config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
+        supplemental_precip.file_in1_grib2.append(mrms_tmp_grib2)
+
+    # Extract the second time stamp of MRMS sub-hourly data if required for the given cycle
+    if(len(supplemental_precip.tmpFile2_mrms_subhourly_timesteps) != 0):
+        supplemental_precip.file_in2_grib2 = []
+        # Loop through the MRMS sub-hourly gz files and extract grib2 files
+        for mrms_gzfile in supplemental_precip.file_in2:
+            print(mrms_gzfile)
+            mrms_grib2_name = mrms_gzfile.stem
+            mrms_tmp_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
+            ioMod.unzip_file(mrms_gzfile, mrms_tmp_grib2, config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+            supplemental_precip.file_in2_grib2.append(mrms_tmp_grib2)
+
+    # Extract the first and second time stamp of MRMS hourly data for the bias correction calculation
+    mrms_grib2_name = supplemental_precip.file_in1_bc.stem
+    mrms_hourly_tmp1_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
+    ioMod.unzip_file(supplemental_precip.file_in1_bc,mrms_hourly_tmp1_grib2, config_options, mpi_config)
+    err_handler.check_program_status(config_options, mpi_config)
+
+    if(len(supplemental_precip.tmpFile2_mrms_subhourly_timesteps) != 0):
+        mrms_grib2_name = supplemental_precip.file_in2_bc.stem
+        mrms_hourly_tmp2_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
+        ioMod.unzip_file(supplemental_precip.file_in2_bc,mrms_hourly_tmp2_grib2, config_options, mpi_config)
+        err_handler.check_program_status(config_options, mpi_config)
+
+    # Open grib2 files associated with current AnA hour
+    ds_subhourly = xr.open_mfdataset(supplemental_precip.file_in1_grib2,engine="cfgrib",concat_dim="time",combine="nested")
+    # Set missing values (< 0) to nan values for xarray computations
+    ds_subhourly['precip_rate'] = ds_subhourly['unknown'].where(ds_subhourly['unknown'] >= 0, np.nan)
+    # Resample 2-minute snapshots into 15-minute mean intensity blocks
+    subhourly_15m = ds_subhourly.resample(time="15min", closed="left").mean(dim="time")
+    # Calculate the precipitation accumulation over the 15 minute interval
+    subhourly_15m_depth = subhourly_15m['precip_rate'] * 0.25
+    # Calculate the hourly precipitation accumulation estimate from MRMS sub-hourly data fields
+    subhourly_accumulation = subhourly_15m_depth.sum(dim="time", skipna=True)
+
+    #Open MRMS hourly gauge corrected (truth) precipitation fields
+    ds_hourly = xr.open_mfdataset(mrms_hourly_tmp1_grib2,engine="cfgrib")
+    # Set missing values (< 0) to nan values for xarray computations
+    mrms_hourly = ds_hourly["unknown"].where(ds_hourly["unknown"] >= 0, np.nan)
+
+    # Calculate the MRMS sub-hourly bias residual
+    bias_ratio = mrms_hourly / (subhourly_accumulation + 1e-05)
+
+    # Apply Meteorological Guardrails to the Bias Ratio Grid
+    # Condition: Only apply a correction if BOTH fields register meaningful rain (> 0.1 mm)
+    # Otherwise, default the bias multiplier to 1.0 (no change/neutral)
+    meaningful_rain_mask = (mrms_hourly > 0.1) & (subhourly_accumulation > 0.1)
+
+    # Apply mask, clip the ratio between 0.1x and 10.0x, and fill dry pixels with 1.0
+    bounded_bias_ratio = bias_ratio.where(meaningful_rain_mask, 1.0)
+    bounded_bias_ratio = bounded_bias_ratio.clip(min=0.1, max=10.0)
+
+
+    # Derive spatial predictions using a Gaussian spatial filter (sigma=5 grid cells)
+    # This extracts the continuous error trends from terrain/radar alignment quirks
+    bias_per_15min_depth = gaussian_filter(bounded_bias_ratio.compute().values, sigma=5)
+
+    # Convert arrays back into Xarray coordinates for clean dataset mapping
+    bias_depth_xr = xr.DataArray(bias_per_15min_depth, coords=[ds_subhourly.latitude.compute().values, ds_subhourly.longitude.compute().values], dims=["latitude", "longitude"])
+
+    # Apply the correction in absolute depth space (mm)
+    corrected_15m_depth = subhourly_15m_depth * bias_depth_xr
+
+    # Apply physical constraints: Precipitation depth cannot drop below 0.0 mm
+    subhourly_15m_tmp1 = corrected_15m_depth.where(corrected_15m_depth >= 0, 0.0)
+
+    if(len(supplemental_precip.tmpFile2_mrms_subhourly_timesteps) != 0):
+        # Open grib2 files associated with current AnA hour
+        ds_subhourly = xr.open_mfdataset(supplemental_precip.file_in2_grib2,engine="cfgrib",concat_dim="time",combine="nested")
+        # Set missing values (< 0) to nan values for xarray computations
+        ds_subhourly['precip_rate'] = ds_subhourly['unknown'].where(ds_subhourly['unknown'] >= 0, np.nan)
+        # Resample 2-minute snapshots into 15-minute mean intensity blocks
+        subhourly_15m = ds_subhourly.resample(time="15min", closed="left").mean(dim="time")
+        # Calculate the precipitation accumulation over the 15 minute interval
+        subhourly_15m_depth = subhourly_15m['precip_rate'] * 0.25
+        # Calculate the hourly precipitation accumulation estimate from MRMS sub-hourly data fields
+        subhourly_accumulation = subhourly_15m_depth.sum(dim="time", skipna=True)
+
+        #Open MRMS hourly gauge corrected (truth) precipitation fields
+        ds_hourly = xr.open_mfdataset(mrms_hourly_tmp2_grib2,engine="cfgrib")
+        # Set missing values (< 0) to nan values for xarray computations
+        mrms_hourly = ds_hourly["unknown"].where(ds_hourly["unknown"] >= 0, np.nan)
+
+        # Calculate the MRMS sub-hourly bias residual
+        bias_ratio = mrms_hourly / (subhourly_accumulation + 1e-05)
+
+        # Apply Meteorological Guardrails to the Bias Ratio Grid
+        # Condition: Only apply a correction if BOTH fields register meaningful rain (> 0.1 mm)
+        # Otherwise, default the bias multiplier to 1.0 (no change/neutral)
+        meaningful_rain_mask = (mrms_hourly > 0.1) & (subhourly_accumulation > 0.1)
+
+        # Apply mask, clip the ratio between 0.1x and 10.0x, and fill dry pixels with 1.0
+        bounded_bias_ratio = bias_ratio.where(meaningful_rain_mask, 1.0)
+        bounded_bias_ratio = bounded_bias_ratio.clip(min=0.1, max=10.0)
+
+        # Derive spatial predictions using a Gaussian spatial filter (sigma=5 grid cells)
+        # This extracts the continuous error trends from terrain/radar alignment quirks
+        bias_per_15min_depth = gaussian_filter(bounded_bias_ratio.compute().values, sigma=5)
+
+        # Convert arrays back into Xarray coordinates for clean dataset mapping
+        bias_depth_xr = xr.DataArray(bias_per_15min_depth, coords=[ds_subhourly.latitude.compute().values, ds_subhourly.longitude.compute().values], dims=["latitude", "longitude"])
+
+        # Apply the correction in absolute depth space (mm)
+        corrected_15m_depth = subhourly_15m_depth * bias_depth_xr
+
+        # Apply physical constraints: Precipitation depth cannot drop below 0.0 mm
+        subhourly_15m_tmp2 = corrected_15m_depth.where(corrected_15m_depth >= 0, 0.0)
+
+        # Slice the sub-hourly cycle timestamps from tmp1 and tmp2 MRMS sub-hourly data
+        subhourly_15m_tmp1 = subhourly_15m_tmp1.isel(time=supplemental_precip.tmpFile1_mrms_subhourly_timesteps)
+
+        subhourly_15m_tmp2 = subhourly_15m_tmp2.isel(time=supplemental_precip.tmpFile2_mrms_subhourly_timesteps)
+
+        # Concatenate the xarray dataframes together based on sub-hourly cycle of interest
+        combined_subhourly = xr.concat([subhourly_15m_tmp1, subhourly_15m_tmp2], dim="time")
+
+        # Compute hourly average from sub-hourly data for 15, 30, or 45 minute cycle
+        mrms_subhourly_final = combined_subhourly.mean(dim="time", skipna=True).compute().values
+
+        # Remove the variables no longer needed for this specific method
+        del subhourly_15m_tmp2
+        del combined_subhourly
+
+    else:
+        # Compute hourly average from sub-hourly data for 00 minute cycle
+        mrms_subhourly_final = subhourly_15m_tmp1.mean(dim="time",skipna=True).compute().values
+
+    # Remove the Python variables that are no longer needed
+    del ds_subhourly
+    del subhourly_15m
+    del subhourly_15m_depth
+    del subhourly_accumulation
+    del mrms_hourly
+    del ds_hourly
+    del bias_ratio
+    del bounded_bias_ratio
+    del meaningful_rain_mask
+    del bias_per_15min_depth
+    del bias_depth_xr
+    del corrected_15m_depth
+    del subhourly_15m_tmp1
+
+
+    # Now remove the temporary MRMS grib files since calculations were completed
+    for f in supplemental_precip.file_in1_grib2:
+        if os.path.isfile(f):
+            try:
+                os_utils.os_remove_retry(f)
+            except OSError:
+                config_options.errMsg = f"Unable to remove scratch file: {f}"
+                err_handler.log_critical(config_options, mpi_config)
+
+    if os.path.isfile(mrms_hourly_tmp1_grib2):
+        try:
+            os_utils.os_remove_retry(mrms_hourly_tmp1_grib2)
+        except OSError:
+            config_options.errMsg = f"Unable to remove scratch file: {mrms_hourly_tmp1_grib2}"
+            err_handler.log_critical(config_options, mpi_config)
+
+    if(len(supplemental_precip.tmpFile2_mrms_subhourly_timesteps) != 0):
+        for f in supplemental_precip.file_in2_grib2:
+            if os.path.isfile(f):
+                try:
+                    os_utils.os_remove_retry(f)
+                except OSError:
+                    config_options.errMsg = f"Unable to remove scratch file: {f}"
+                    err_handler.log_critical(config_options, mpi_config)
+
+        if os.path.isfile(mrms_hourly_tmp2_grib2):
+            try:
+                os_utils.os_remove_retry(mrms_hourly_tmp2_grib2)
+            except OSError:
+                config_options.errMsg = f"Unable to remove scratch file: {mrms_hourly_tmp2_grib2}"
+                err_handler.log_critical(config_options, mpi_config)
+
+    return mrms_subhourly_final
 
 def get_subhourly_avg(input_forcings,var,id_tmp,id_tmp2):
 
@@ -10149,6 +10339,582 @@ def regrid_mrms_hourly(
         mpi_config.comm.barrier()
         err_handler.check_program_status(config_options, mpi_config)
 
+def regrid_mrms_subhourly(
+    supplemental_precip, config_options, wrf_hydro_geo_meta, mpi_config
+):
+    """Rebgrid MRMS hourly precipitation.
+
+    Function for handling regridding hourly MRMS precipitation. An RQI mask file
+    Is necessary to filter out poor precipitation estimates.
+    :param supplemental_precip:
+    :param config_options:
+    :param wrf_hydro_geo_meta:
+    :param mpi_config:
+    :return:
+    """
+    esmf_regridobj_call_retry_partial = functools.partial(
+        esmf_regridobj_call_retry, mpi_config, config_options, err_handler
+    )
+
+    # Do we want to use MRMS data at this timestep? If not, log and continue
+    if not config_options.use_data_at_current_time:
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "Exceeded max hours for MRMS precipitation"
+            err_handler.log_msg(config_options, mpi_config)
+        return
+
+    # If the expected file is missing, this means we are allowing missing files, simply
+    # exit out of this routine as the regridded fields have already been set to NDV.
+
+    # In the case of MRMS sub-hourly cycling, both input files are expected for
+    # sub-hourly averaging scheme
+
+    # Otherwise, mrms sub-hourly 15 minute fields only require a single input file
+    if supplemental_precip.product_name == "MRMS_Subhourly_Cycling":
+        if not os.path.isfile(supplemental_precip.file_in1_bc) and not os.path.isfile(supplemental_precip.file_in2_bc):
+            if mpi_config.rank == 0:
+                config_options.statusMsg = (
+                    "No MRMS hourly Precipitation available. Supplemental precipitation will "
+                    "not be used."
+                )
+                err_handler.log_msg(config_options, mpi_config)
+            return
+        # Check to see if we're missing any of the 2-minute MRMS sub-hourly files required for sub-hourly averaging technique
+        elif any(not f.is_file() for f in supplemental_precip.file_in1) or any(not f.is_file() for f in supplemental_precip.file_in2):
+            if mpi_config.rank == 0:
+                config_options.statusMsg = (
+                    "No MRMS sub-hourly Precipitation available. Supplemental precipitation will "
+                    "not be used."
+                )
+                err_handler.log_msg(config_options, mpi_config)
+            return
+    else:
+        if not os.path.isfile(supplemental_precip.file_in1_bc):
+                return
+
+    # Check to see if the regrid complete flag for this
+    # output time step is true. This entails the necessary
+    # inputs have already been regridded and we can move on.
+    if supplemental_precip.regridComplete:
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "No MRMS sub-hourly regridding required for this timestep."
+            err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+        return
+
+    # MRMS data originally is stored as .gz files. We need to compose a series
+    # of temporary paths.
+    # 1.) The unzipped GRIB2 hourly and sub-hourly precipitation files.
+    # 2.) Open hourly and sub-hourly precipitation files using xarray cfgrib engine
+    # 4.) Calculate the MRMS bias correction for current and next hour MRMS data
+    # 5.) Aggregate 15-minute sub-hourly MRMS data fields, calculate requested temporal average
+    # 6.) Apply MRMS bias correction for the current and next hour MRMS data to sub-hourly MRMS data fields
+
+    # If the input paths have been set to None, this means input is missing. We will
+    # alert the user, and set the final output grids to be the global NDV and return.
+    if not supplemental_precip.file_in1_bc:
+        if mpi_config.rank == 0:
+            config_options.statusMsg = (
+                "No MRMS Precipitation available. Supplemental precipitation will "
+                "not be used."
+            )
+            err_handler.log_msg(config_options, mpi_config)
+        supplemental_precip.regridded_precip2 = None
+        supplemental_precip.regridded_precip1 = None
+        if config_options.grid_type == "unstructured":
+            supplemental_precip.regridded_precip2_elem = None
+            supplemental_precip.regridded_precip1_elem = None
+        return
+
+    err_handler.check_program_status(config_options, mpi_config)
+
+    file_uuid = str(mpi_config.uid64)
+    mrms_tmp_grib2 = str(
+        Path(config_options.scratch_dir)
+        / f"{file_uuid}_MRMS_PCP_TMP-{mkfilename()}.grib2"
+    )
+    mrms_tmp_nc = str(
+        Path(config_options.scratch_dir) / f"{file_uuid}_MRMS_PCP_TMP-{mkfilename()}.nc"
+    )
+
+    id_mrms = None
+    try:
+        config_options.statusMsg = "Regrid MRMS Sub-hourly"
+        err_handler.log_msg(config_options, mpi_config)
+
+        # Unzip MRMS hourly file to temporary location.
+        ioMod.unzip_file(
+            supplemental_precip.file_in1_bc, mrms_tmp_grib2, config_options, mpi_config
+        )
+        err_handler.check_program_status(config_options, mpi_config)
+
+        # Perform a GRIB dump to NetCDF for the MRMS precip for calculating weights.
+        if WGRIB2_env:
+            cmd1 = "$WGRIB2 " + mrms_tmp_grib2 + " -netcdf " + mrms_tmp_nc
+        else:
+            cmd1 = mrms_tmp_grib2
+
+        id_mrms = ioMod.open_grib2(
+            mrms_tmp_grib2,
+            mrms_tmp_nc,
+            cmd1,
+            config_options,
+            mpi_config,
+            supplemental_precip.netcdf_var_names[0],
+            special_case=True,
+        )
+
+        err_handler.check_program_status(config_options, mpi_config)
+
+        # Check to see if we need to calculate regridding weights.
+        calc_regrid_flag = check_supp_pcp_regrid_status(
+            id_mrms, supplemental_precip, config_options, wrf_hydro_geo_meta, mpi_config
+        )
+        err_handler.check_program_status(config_options, mpi_config)
+
+        if calc_regrid_flag:
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Calculating MRMS sub-hourly regridding weights."
+                err_handler.log_msg(
+                    config_options, mpi_config, True
+                )  # log at debug level
+            calculate_supp_pcp_weights(
+                supplemental_precip, id_mrms, mrms_tmp_nc, config_options, mpi_config
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+
+        # We will set the RQI field to 1.0 here so no MRMS data gets masked out.
+        if config_options.grid_type == "gridded":
+            supplemental_precip.regridded_rqi2[:, :] = 1.0
+        elif config_options.grid_type == "unstructured":
+            supplemental_precip.regridded_rqi2[:] = 1.0
+            supplemental_precip.regridded_rqi2_elem[:] = 1.0
+        elif config_options.grid_type == "hydrofabric":
+            supplemental_precip.regridded_rqi2[:] = 1.0
+
+        if mpi_config.rank == 0:
+            config_options.statusMsg = "MRMS sub-hourly will not be filtered using RQI values."
+            err_handler.log_msg(
+                config_options, mpi_config,True
+            )
+
+        err_handler.check_program_status(config_options, mpi_config)
+
+        if config_options.grid_type == "gridded":
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = (
+                    "Regridding: " + supplemental_precip.netcdf_var_names[0]
+                )
+                err_handler.log_msg(
+                    config_options, mpi_config, True
+                )  # log at debug level
+                try:
+
+                    if supplemental_precip.product_name == "MRMS_Subhourly_Cycling":
+                        var_tmp = get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config)
+
+                except (ValueError, KeyError, AttributeError) as err:
+                    config_options.errMsg = (
+                        "Unable to perform MRMS sub-hourly bias correction and aggregation"
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(
+                supplemental_precip, var_tmp, config_options
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+            supplemental_precip.esmf_field_in.data[:, :] = var_sub_tmp
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                supplemental_precip.esmf_field_out = esmf_regridobj_call_retry_partial(
+                    supplemental_precip.regridObj,
+                    supplemental_precip.esmf_field_in,
+                    supplemental_precip.esmf_field_out,
+                )
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid MRMS sub-hourly precipitation: " + str(
+                    ve
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Set any pixel cells outside the input domain to the global missing value, and set negative precip values to 0
+            try:
+                if len(np.argwhere(supplemental_precip.esmf_field_out.data < 0)) > 0:
+                    supplemental_precip.esmf_field_out.data[
+                        np.where(supplemental_precip.esmf_field_out.data < 0)
+                    ] = config_options.globalNdv
+                    # config_options.statusMsg = "WARNING: Found negative precipitation values in MRMS data, setting to 0"
+                    # err_handler.log_warning(config_options, mpi_config)
+
+                supplemental_precip.esmf_field_out.data[
+                    np.where(supplemental_precip.regridded_mask == 0)
+                ] = config_options.globalNdv
+
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = (
+                    "Unable to run mask search on MRMS sub-hourly supplemental precip: " + str(npe)
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            supplemental_precip.regridded_precip2[:, :] = (
+                supplemental_precip.esmf_field_out.data
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+            if supplemental_precip.keyValue != 14:
+                # Convert the hourly precipitation total to a rate of mm/s
+                try:
+                    ind_valid = np.where(
+                        supplemental_precip.regridded_precip2
+                        != config_options.globalNdv
+                    )
+                    supplemental_precip.regridded_precip2[ind_valid] = (
+                        supplemental_precip.regridded_precip2[ind_valid] / 3600.0
+                    )
+                    del ind_valid
+                except (ValueError, AttributeError, ArithmeticError, KeyError) as npe:
+                    config_options.errMsg = (
+                        "Unable to run global NDV search on MRMS sub-hourly regridded precip: "
+                        + str(npe)
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                supplemental_precip.regridded_precip1[:, :] = (
+                    supplemental_precip.regridded_precip2[:, :]
+                )
+                supplemental_precip.regridded_rqi1[:, :] = (
+                    supplemental_precip.regridded_rqi2[:, :]
+                )
+        # mpi_config.comm.barrier()
+
+        elif config_options.grid_type == "unstructured":
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = (
+                    "Regridding: " + supplemental_precip.netcdf_var_names[0]
+                )
+                err_handler.log_msg(
+                    config_options, mpi_config, True
+                )  # log at debug level
+                try:
+
+                    if supplemental_precip.product_name == "MRMS_Subhourly_Cycling":
+                        var_tmp = get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config)
+
+                except (ValueError, KeyError, AttributeError) as err:
+                    config_options.errMsg = (
+                        "Unable to perform MRMS sub-hourly bias correction and aggregation"
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(
+                supplemental_precip, var_tmp, config_options
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+            supplemental_precip.esmf_field_in.data[:, :] = var_sub_tmp
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                supplemental_precip.esmf_field_out = esmf_regridobj_call_retry_partial(
+                    supplemental_precip.regridObj,
+                    supplemental_precip.esmf_field_in,
+                    supplemental_precip.esmf_field_out,
+                )
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid MRMS sub-hourly precipitation: " + str(
+                    ve
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Set any pixel cells outside the input domain to the global missing value, and set negative precip values to 0
+            try:
+                if len(np.argwhere(supplemental_precip.esmf_field_out.data < 0)) > 0:
+                    supplemental_precip.esmf_field_out.data[
+                        np.where(supplemental_precip.esmf_field_out.data < 0)
+                    ] = config_options.globalNdv
+                    # config_options.statusMsg = "WARNING: Found negative precipitation values in MRMS data, setting to 0"
+                    # err_handler.log_warning(config_options, mpi_config)
+
+                supplemental_precip.esmf_field_out.data[
+                    np.where(supplemental_precip.regridded_mask == 0)
+                ] = config_options.globalNdv
+
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = (
+                    "Unable to run mask search on MRMS sub-hourly supplemental precip: " + str(npe)
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            supplemental_precip.regridded_precip2[:] = (
+                supplemental_precip.esmf_field_out.data
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+            if supplemental_precip.keyValue != 14:
+                # Convert the hourly precipitation total to a rate of mm/s
+                try:
+                    ind_valid = np.where(
+                        supplemental_precip.regridded_precip2
+                        != config_options.globalNdv
+                    )
+                    supplemental_precip.regridded_precip2[ind_valid] = (
+                        supplemental_precip.regridded_precip2[ind_valid] / 3600.0
+                    )
+                    del ind_valid
+                except (ValueError, AttributeError, ArithmeticError, KeyError) as npe:
+                    config_options.errMsg = (
+                        "Unable to run global NDV search on MRMS sub-hourly regridded precip: "
+                        + str(npe)
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                supplemental_precip.regridded_precip1[:] = (
+                    supplemental_precip.regridded_precip2[:]
+                )
+                supplemental_precip.regridded_rqi1[:] = (
+                    supplemental_precip.regridded_rqi2[:]
+                )
+            # mpi_config.comm.barrier()
+
+            # Regrid the input variables.
+            var_tmp_elem = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = (
+                    "Regridding: " + supplemental_precip.netcdf_var_names[0]
+                )
+                err_handler.log_msg(
+                    config_options, mpi_config, True
+                )  # log at debug level
+                try:
+
+                    if supplemental_precip.product_name == "MRMS_Subhourly_Cycling":
+                        var_tmp_elem = get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config)
+
+                except (ValueError, KeyError, AttributeError) as err:
+                    config_options.errMsg = (
+                        "Unable to perform MRMS sub-hourly bias correction and aggregation"
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp_elem = mpi_config.scatter_array(
+                supplemental_precip, var_tmp_elem, config_options
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+            supplemental_precip.esmf_field_in_elem.data[:, :] = var_sub_tmp_elem
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                supplemental_precip.esmf_field_out_elem = (
+                    esmf_regridobj_call_retry_partial(
+                        supplemental_precip.regridObj_elem,
+                        supplemental_precip.esmf_field_in_elem,
+                        supplemental_precip.esmf_field_out_elem,
+                    )
+                )
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid MRMS sub-hourly precipitation: " + str(
+                    ve
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Set any pixel cells outside the input domain to the global missing value, and set negative precip values to 0
+            try:
+                supplemental_precip.esmf_field_out_elem.data[
+                    np.where(supplemental_precip.regridded_mask_elem == 0)
+                ] = config_options.globalNdv
+
+                if (
+                    len(np.argwhere(supplemental_precip.esmf_field_out_elem.data < 0))
+                    > 0
+                ):
+                    supplemental_precip.esmf_field_out_elem.data[
+                        np.where(supplemental_precip.esmf_field_out_elem.data < 0)
+                    ] = config_options.globalNdv
+                    # config_options.statusMsg = "WARNING: Found negative precipitation values in MRMS data, setting to 0"
+                    # err_handler.log_warning(config_options, mpi_config)
+
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = (
+                    "Unable to run mask search on MRMS sub-hourly supplemental precip: " + str(npe)
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            supplemental_precip.regridded_precip2_elem[:] = (
+                supplemental_precip.esmf_field_out_elem.data
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+            if supplemental_precip.keyValue != 14:
+                # Convert the hourly precipitation total to a rate of mm/s
+                try:
+                    ind_valid_elem = np.where(
+                        supplemental_precip.regridded_precip2_elem
+                        != config_options.globalNdv
+                    )
+                    supplemental_precip.regridded_precip2_elem[ind_valid_elem] = (
+                        supplemental_precip.regridded_precip2_elem[ind_valid_elem] / 3600.0
+                    )
+                    del ind_valid_elem
+                except (ValueError, AttributeError, ArithmeticError, KeyError) as npe:
+                    config_options.errMsg = (
+                        "Unable to run global NDV search on MRMS sub-hourly regridded precip: "
+                        + str(npe)
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                supplemental_precip.regridded_precip1_elem[:] = (
+                    supplemental_precip.regridded_precip2_elem[:]
+                )
+                supplemental_precip.regridded_rqi1_elem[:] = (
+                    supplemental_precip.regridded_rqi2_elem[:]
+                )
+        # mpi_config.comm.barrier()
+
+        elif config_options.grid_type == "hydrofabric":
+            # Regrid the input variables.
+            var_tmp = None
+            if mpi_config.rank == 0:
+                config_options.statusMsg = (
+                    "Regridding: " + supplemental_precip.netcdf_var_names[0]
+                )
+                err_handler.log_msg(
+                    config_options, mpi_config, True
+                )  # log at debug level
+                try:
+
+                    if supplemental_precip.product_name == "MRMS_Subhourly_Cycling":
+                        var_tmp = get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config)
+
+                except (ValueError, KeyError, AttributeError) as err:
+                    config_options.errMsg = (
+                        "Unable to perform MRMS sub-hourly bias correction and aggregation"
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            var_sub_tmp = mpi_config.scatter_array(
+                supplemental_precip, var_tmp, config_options
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+            supplemental_precip.esmf_field_in.data[:, :] = var_sub_tmp
+            err_handler.check_program_status(config_options, mpi_config)
+
+            try:
+                supplemental_precip.esmf_field_out = esmf_regridobj_call_retry_partial(
+                    supplemental_precip.regridObj,
+                    supplemental_precip.esmf_field_in,
+                    supplemental_precip.esmf_field_out,
+                )
+            except ValueError as ve:
+                config_options.errMsg = "Unable to regrid MRMS sub-hourly precipitation: " + str(
+                    ve
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            # Set any pixel cells outside the input domain to the global missing value, and set negative precip values to 0
+            try:
+                if len(np.argwhere(supplemental_precip.esmf_field_out.data < 0)) > 0:
+                    supplemental_precip.esmf_field_out.data[
+                        np.where(supplemental_precip.esmf_field_out.data < 0)
+                    ] = config_options.globalNdv
+                    # config_options.statusMsg = "WARNING: Found negative precipitation values in MRMS data, setting to 0"
+                    # err_handler.log_warning(config_options, mpi_config)
+
+                supplemental_precip.esmf_field_out.data[
+                    np.where(supplemental_precip.regridded_mask == 0)
+                ] = config_options.globalNdv
+
+            except (ValueError, ArithmeticError) as npe:
+                config_options.errMsg = (
+                    "Unable to run mask search on MRMS sub-hourly supplemental precip: " + str(npe)
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            err_handler.check_program_status(config_options, mpi_config)
+
+            supplemental_precip.regridded_precip2[:] = (
+                supplemental_precip.esmf_field_out.data
+            )
+            err_handler.check_program_status(config_options, mpi_config)
+
+            if supplemental_precip.keyValue != 14:
+                # Convert the hourly precipitation total to a rate of mm/s
+                try:
+                    ind_valid = np.where(
+                        supplemental_precip.regridded_precip2
+                        != config_options.globalNdv
+                    )
+                    supplemental_precip.regridded_precip2[ind_valid] = (
+                        supplemental_precip.regridded_precip2[ind_valid] / 3600.0
+                    )
+                    del ind_valid
+                except (ValueError, AttributeError, ArithmeticError, KeyError) as npe:
+                    config_options.errMsg = (
+                        "Unable to run global NDV search on MRMS sub-hourly regridded precip: "
+                        + str(npe)
+                    )
+                    err_handler.log_critical(config_options, mpi_config)
+                err_handler.check_program_status(config_options, mpi_config)
+
+            # If we are on the first timestep, set the previous regridded field to be
+            # the latest as there are no states for time 0.
+            if config_options.current_output_step == 1:
+                supplemental_precip.regridded_precip1[:] = (
+                    supplemental_precip.regridded_precip2[:]
+                )
+                supplemental_precip.regridded_rqi1[:] = (
+                    supplemental_precip.regridded_rqi2[:]
+                )
+        # mpi_config.comm.barrier()
+
+    finally:
+        # Close whichever file handles got opened
+        if id_mrms is not None:
+            try:
+                id_mrms.close()
+            except OSError:
+                config_options.errMsg = f"Unable to close NetCDF file: {mrms_tmp_nc}"
+                err_handler.log_critical(config_options, mpi_config)
+
+        if mpi_config.rank == 0:
+            for f in (mrms_tmp_grib2, mrms_tmp_nc):
+                if os.path.isfile(f):
+                    try:
+                        os_utils.os_remove_retry(f)
+                    except OSError:
+                        config_options.errMsg = f"Unable to remove scratch file: {f}"
+                        err_handler.log_critical(config_options, mpi_config)
+        mpi_config.comm.barrier()
+        err_handler.check_program_status(config_options, mpi_config)
 
 def regrid_mrms_precip_flag(
     supplemental_precip, config_options, wrf_hydro_geo_meta, mpi_config
