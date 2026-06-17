@@ -124,7 +124,6 @@ def get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config):
     supplemental_precip.file_in1_grib2 = []
     # Loop through the MRMS sub-hourly gz files and extract grib2 files
     for mrms_gzfile in supplemental_precip.file_in1:
-        print(mrms_gzfile)
         mrms_grib2_name = mrms_gzfile.stem
         mrms_tmp_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
         ioMod.unzip_file(mrms_gzfile, mrms_tmp_grib2, config_options, mpi_config)
@@ -136,7 +135,6 @@ def get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config):
         supplemental_precip.file_in2_grib2 = []
         # Loop through the MRMS sub-hourly gz files and extract grib2 files
         for mrms_gzfile in supplemental_precip.file_in2:
-            print(mrms_gzfile)
             mrms_grib2_name = mrms_gzfile.stem
             mrms_tmp_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
             ioMod.unzip_file(mrms_gzfile, mrms_tmp_grib2, config_options, mpi_config)
