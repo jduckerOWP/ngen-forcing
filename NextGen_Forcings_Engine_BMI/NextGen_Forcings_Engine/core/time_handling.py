@@ -5,6 +5,7 @@ import glob
 import logging
 import math
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -40,9 +41,15 @@ def calculate_lookback_window(config_options):
 
     # Determine the first forecast iteration that will be processed on this day
     # based on the forecast frequency and where in the day we are at.
-    fcst_step_tmp = math.ceil(
-        (d_lookback.hour * 60 + d_lookback.minute) / config_options.fcst_freq
-    )
+    if(26 in config_options.input_forcings):
+        fcst_step_tmp = math.ceil(
+            (d_lookback.hour * 60) / config_options.fcst_freq
+        )
+    else: 
+        fcst_step_tmp = math.ceil(
+            (d_lookback.hour * 60 + d_lookback.minute) / config_options.fcst_freq
+        )
+        
     d_look_tmp1 = datetime.datetime(d_lookback.year, d_lookback.month, d_lookback.day)
     d_look_tmp1 = d_look_tmp1 + datetime.timedelta(
         seconds=(60 * config_options.fcst_freq * fcst_step_tmp)
@@ -54,7 +61,10 @@ def calculate_lookback_window(config_options):
             seconds=60 * config_options.fcst_shift
         )
 
-    config_options.b_date_proc = d_look_tmp1
+    if(26 in config_options.input_forcings):
+        config_options.b_date_proc = d_look_tmp1 + datetime.timedelta(minutes=d_lookback.minute)
+    else:
+        config_options.b_date_proc = d_look_tmp1
 
     # Now calculate the end of the processing window based on the time from the
     # beginning of the processing window.
@@ -2977,6 +2987,197 @@ def find_hourly_mrms_radar_neighbors(
             elif config_options.grid_type == "hydrofabric":
                 supplemental_precip.regridded_precip2[:] = config_options.globalNdv
 
+def find_hourly_mrms_subhourly_neighbors(
+    supplemental_precip, config_options, d_current, mpi_config
+):
+    """Find hourly MRMS subhourly files for specific averaging scheme.
+
+    Function to calculate the suite of files required for specific averaging scheme.
+    :param supplemental_precip:
+    :param config_options:
+    :param d_current:
+    :param mpi_config:
+    :return:
+    """
+
+    current_input_cycle = config_options.current_fcst_cycle
+
+    # First we need to find the nearest previous and next hour, which is
+    # the previous/next MRMS files we will be using.
+    current_yr = current_input_cycle.year
+    current_mo = current_input_cycle.month
+    current_day = current_input_cycle.day
+    current_hr = current_input_cycle.hour
+    current_min = current_input_cycle.minute
+
+    if supplemental_precip.product_name == "MRMS_Subhourly_Cycling":
+        # Set the input file frequency to be hourly.
+        supplemental_precip.input_frequency = 60.0
+
+        # Now set the MRMS subhourly cycling timesteps based on 
+        # the forecast sub-hourly cycle
+        if current_min == 0:
+            supplemental_precip.tmpFile1_mrms_subhourly_timesteps = [0,1,2,3]
+            supplemental_precip.tmpFile2_mrms_subhourly_timesteps = []
+        elif current_min == 15:
+            supplemental_precip.tmpFile1_mrms_subhourly_timesteps = [1,2,3]
+            supplemental_precip.tmpFile2_mrms_subhourly_timesteps = [0]
+        elif current_min == 30:
+            supplemental_precip.tmpFile1_mrms_subhourly_timesteps = [2,3]
+            supplemental_precip.tmpFile2_mrms_subhourly_timesteps = [0,1]
+        elif current_min == 45:
+            supplemental_precip.tmpFile1_mrms_subhourly_timesteps = [3]
+            supplemental_precip.tmpFile2_mrms_subhourly_timesteps = [0,1,2]
+
+    # Set the list to extract all 2-minute MRMS sub-hourly data for a given hour
+    supplemental_precip.mrms_subhourly_timesteps = list(np.arange(0,60,2).data)
+
+    prev_mrms_date = datetime.datetime(current_yr, current_mo, current_day, current_hr)
+    next_mrms_date = prev_mrms_date + datetime.timedelta(seconds=3600.0)
+
+    supplemental_precip.pcp_date1 = prev_mrms_date
+    supplemental_precip.pcp_date2 = next_mrms_date
+
+    # Used to populate paths below
+    date_path1 = supplemental_precip.pcp_date1.strftime("%Y%m%d")
+    date_path2 = supplemental_precip.pcp_date2.strftime("%Y%m%d")
+    hour1 = supplemental_precip.pcp_date1.strftime("%H")
+    hour2 = supplemental_precip.pcp_date2.strftime("%H")
+    gz_ext = ".gz" if supplemental_precip.file_type != NETCDF else ""
+
+    if supplemental_precip.product_name == "MRMS_Subhourly_Cycling":
+        tmp_file1 = []
+        tmp_file2 = []
+        for minute_int in supplemental_precip.mrms_subhourly_timesteps:
+            minute_str = f"{minute_int:02d}"
+            pattern = f"{supplemental_precip.inDir}/MRMS_SubHourly/{date_path1}/MRMS_PrecipRate_00.00_{date_path1}-{hour1}{minute_str}00{supplemental_precip.file_ext}{gz_ext}"
+            file_path = Path(pattern)
+            tmp_file1.append(file_path)
+
+        if(len(supplemental_precip.tmpFile2_mrms_subhourly_timesteps) != 0):
+            for minute_int in supplemental_precip.mrms_subhourly_timesteps:
+                minute_str = f"{minute_int:02d}"
+                pattern = f"{supplemental_precip.inDir}/MRMS_SubHourly/{date_path2}/MRMS_PrecipRate_00.00_{date_path2}-{hour2}{minute_str}00{supplemental_precip.file_ext}{gz_ext}"
+                file_path = Path(pattern)
+                tmp_file2.append(file_path)
+
+    # First check for Pass 2 MRMS Multisensor QPE fields
+    tmp_file1_bc = f"{supplemental_precip.inDir}/MRMS_Hourly/MultiSensor_QPE_01H_Pass2_00.00/{date_path1}/MRMS_MultiSensor_QPE_01H_Pass2_00.00_{date_path1}-{hour1}0000{supplemental_precip.file_ext}{gz_ext}"
+    tmp_file2_bc= f"{supplemental_precip.inDir}/MRMS_Hourly/MultiSensor_QPE_01H_Pass2_00.00/{date_path2}/MRMS_MultiSensor_QPE_01H_Pass2_00.00_{date_path2}-{hour2}0000{supplemental_precip.file_ext}{gz_ext}"
+
+    # Defer to Pass 1 MRMS Multisensor QPE fields if Pass 2 is not available
+    if not (os.path.isfile(tmp_file1_bc) and os.path.isfile(tmp_file2_bc)):
+        tmp_file1_bc = f"{supplemental_precip.inDir}/MRMS_Hourly/MultiSensor_QPE_01H_Pass1_00.00/{date_path1}/MRMS_MultiSensor_QPE_01H_Pass1_00.00_{date_path1}-{hour1}0000{supplemental_precip.file_ext}{gz_ext}"
+        tmp_file2_bc = f"{supplemental_precip.inDir}/MRMS_Hourly/MultiSensor_QPE_01H_Pass1_00.00/{date_path2}/MRMS_MultiSensor_QPE_01H_Pass1_00.00_{date_path2}-{hour2}0000{supplemental_precip.file_ext}{gz_ext}"
+
+    tmp_rqi_file1 = None
+    tmp_rqi_file2 = None
+
+    if mpi_config.rank == 0:
+        config_options.statusMsg = "Previous MRMS supplemental file: " + tmp_file1_bc
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+        config_options.statusMsg = "Next MRMS supplemental file: " + tmp_file2_bc
+        err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+
+    err_handler.check_program_status(config_options, mpi_config)
+
+    # Check to see if files are already set. If not, then reset, grids and
+    # regridding objects to communicate things need to be re-established.
+    if (
+        supplemental_precip.file_in1 != tmp_file1
+        or supplemental_precip.file_in2 != tmp_file2
+    ):
+        if config_options.current_output_step == 1:
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
+
+            supplemental_precip.regridded_rqi1 = config_options.globalNdv
+            supplemental_precip.regridded_rqi2 = config_options.globalNdv
+
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+
+                supplemental_precip.regridded_rqi1_elem = config_options.globalNdv
+                supplemental_precip.regridded_rqi2_elem = config_options.globalNdv
+        else:
+            # The forecast window has shifted. Reset fields 2 to
+            # be fields 1.
+            supplemental_precip.regridded_precip1 = (
+                supplemental_precip.regridded_precip1
+            )
+            supplemental_precip.regridded_precip2 = (
+                supplemental_precip.regridded_precip2
+            )
+            supplemental_precip.regridded_rqi1 = supplemental_precip.regridded_rqi1
+            supplemental_precip.regridded_rqi2 = supplemental_precip.regridded_rqi2
+            if config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip1_elem = (
+                    supplemental_precip.regridded_precip1_elem
+                )
+                supplemental_precip.regridded_precip2_elem = (
+                    supplemental_precip.regridded_precip2_elem
+                )
+                supplemental_precip.regridded_rqi1_elem = (
+                    supplemental_precip.regridded_rqi1_elem
+                )
+                supplemental_precip.regridded_rqi2_elem = (
+                    supplemental_precip.regridded_rqi2_elem
+                )
+
+        supplemental_precip.file_in1 = tmp_file1
+        supplemental_precip.file_in2 = tmp_file2
+        supplemental_precip.file_in1_bc = Path(tmp_file1_bc)
+        supplemental_precip.file_in2_bc = Path(tmp_file2_bc)
+        supplemental_precip.rqi_file_in1 = tmp_rqi_file1
+        supplemental_precip.rqi_file_in2 = tmp_rqi_file2
+        supplemental_precip.regridComplete = False
+
+    if mpi_config.rank == 0:
+        if not os.path.isfile(supplemental_precip.file_in2_bc) and (supplemental_precip.keyValue == 16):
+            config_options.statusMsg = (
+                "MRMS file {} not found, will attempt to use {} instead.".format(
+                    supplemental_precip.file_in2, supplemental_precip.file_in1
+                )
+            )
+            err_handler.log_warning(config_options, mpi_config)
+            supplemental_precip.file_in2 = supplemental_precip.file_in1
+        if not os.path.isfile(supplemental_precip.file_in2_bc):
+            if supplemental_precip.enforce == 1:
+                config_options.errMsg = (
+                    "Expected input MRMS file: "
+                    + supplemental_precip.file_in2_bc
+                    + " not found."
+                )
+                err_handler.log_critical(config_options, mpi_config)
+            else:
+                config_options.statusMsg = (
+                    "Expected input MRMS file: "
+                    + supplemental_precip.file_in2_bc
+                    + " not found. "
+                    + "Will not use in final layering."
+                )
+                err_handler.log_warning(config_options, mpi_config)
+    err_handler.check_program_status(config_options, mpi_config)
+
+    # If the file is missing, set the local slab of arrays to missing.
+    if not os.path.isfile(supplemental_precip.file_in2_bc):
+        if supplemental_precip.regridded_precip2 is not None:
+            if config_options.grid_type == "gridded":
+                supplemental_precip.regridded_precip2[:, :] = config_options.globalNdv
+            elif config_options.grid_type == "unstructured":
+                supplemental_precip.regridded_precip2[:] = config_options.globalNdv
+                supplemental_precip.regridded_precip2_elem[:] = config_options.globalNdv
+            elif config_options.grid_type == "hydrofabric":
+                supplemental_precip.regridded_precip2[:] = config_options.globalNdv
 
 def find_hourly_wrf_arw_neighbors(
     supplemental_precip, config_options, d_current, mpi_config
@@ -4699,7 +4900,10 @@ def find_conus_hrrr_15min_neighbors(input_forcings, config_options, d_current, m
 
     # Next input date is one hour ahead of the current forecast hour
     if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
-        next_input_date = d_current + datetime.timedelta(seconds=min_since_last_output * 60)
+        if config_options.ana_flag:
+            next_input_date = current_input_cycle + datetime.timedelta(seconds=min_since_last_output * 60)
+        else:
+            next_input_date = d_current + datetime.timedelta(seconds=min_since_last_output * 60)
     else:
         # Otherwise, next input date is based on the current forecast hour plus cycling frequency in time
         next_input_date = d_current + datetime.timedelta(seconds=min_until_next_output * 60)
@@ -4779,8 +4983,8 @@ def find_conus_hrrr_15min_neighbors(input_forcings, config_options, d_current, m
 
     elif config_options.ana_flag == 1:
         # Calculate expected file paths.
-        pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
-        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/subhourly/*{current_input_cycle.strftime('%H')}z*{str(prev_input_forecast_hour).zfill(2)}.grib2"
+        pattern1 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/*{current_input_cycle.strftime('%H')}z*{str(input_forcings.fcst_hour1).zfill(2)}.grib2"
+        pattern2 = f"{input_forcings.inDir}/*.{current_input_cycle.strftime('%Y%m%d')}/subhourly/*{current_input_cycle.strftime('%H')}z*{str(input_forcings.fcst_hour1).zfill(2)}.grib2"
 
         files1 = glob.glob(pattern1) + glob.glob(pattern2)
 
@@ -4788,6 +4992,18 @@ def find_conus_hrrr_15min_neighbors(input_forcings, config_options, d_current, m
         if mpi_config.rank == 0:
             config_options.statusMsg = "Previous input file being used: " + tmp_file1
             err_handler.log_msg(config_options, mpi_config, True)  # log at debug level
+
+        pattern1 = f"{input_forcings.inDir}/*.{next_input_date.strftime('%Y%m%d')}/*{next_input_date.strftime('%H')}z*{str(input_forcings.fcst_hour1).zfill(2)}.grib2"
+        pattern2 = f"{input_forcings.inDir}/*.{next_input_date.strftime('%Y%m%d')}/subhourly/*{next_input_date.strftime('%H')}z*{str(input_forcings.fcst_hour1).zfill(2)}.grib2"
+
+        files2 = glob.glob(pattern1) + glob.glob(pattern2)
+
+        tmp_file2 = files2[0]
+        if mpi_config.rank == 0:
+            if mpi_config.rank == 0:
+                config_options.statusMsg = "Next input file being used: " + tmp_file2
+                err_handler.log_msg(config_options, mpi_config)
+
 
     err_handler.check_program_status(config_options, mpi_config)
 
@@ -4806,8 +5022,13 @@ def find_conus_hrrr_15min_neighbors(input_forcings, config_options, d_current, m
                     input_forcings.regridded_forcings2_elem = (
                         input_forcings.regridded_forcings2_elem
                     )
-                input_forcings.file_in1 = tmp_file1
-                input_forcings.file_in2 = tmp_file1
+
+                if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                    input_forcings.file_in1 = tmp_file1
+                    input_forcings.file_in2 = tmp_file2
+                else:
+                    input_forcings.file_in1 = tmp_file1
+                    input_forcings.file_in2 = tmp_file1
             else:
                 if config_options.grid_type == "gridded":
                     input_forcings.regridded_forcings1[:, :, :] = (
@@ -4824,8 +5045,15 @@ def find_conus_hrrr_15min_neighbors(input_forcings, config_options, d_current, m
                     input_forcings.regridded_forcings1_elem[:, :] = (
                         input_forcings.regridded_forcings2_elem[:, :]
                     )
-                input_forcings.file_in1 = tmp_file1
-                input_forcings.file_in2 = tmp_file1
+
+
+                if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                    input_forcings.file_in1 = tmp_file1
+                    input_forcings.file_in2 = tmp_file2
+                else:
+                    input_forcings.file_in1 = tmp_file1
+                    input_forcings.file_in2 = tmp_file1
+
             input_forcings.regridComplete = False
     else:
         if (
@@ -4871,11 +5099,17 @@ def find_conus_hrrr_15min_neighbors(input_forcings, config_options, d_current, m
                         input_forcings.regridded_forcings2_elem = (
                             input_forcings.regridded_forcings2_elem
                         )
-                    input_forcings.file_in2 = tmp_file1
-                    input_forcings.file_in1 = tmp_file1
-                    input_forcings.fcst_date2 = input_forcings.fcst_date1
-                    input_forcings.fcst_hour2 = input_forcings.fcst_hour1
-                    input_forcings.fcst_min2 = input_forcings.fcst_min1
+
+                    if input_forcings.product_name == "HRRR_CONUS_15min_Cycling":
+                        input_forcings.file_in1 = tmp_file1
+                        input_forcings.file_in2 = tmp_file2
+                    else:
+                        input_forcings.file_in2 = tmp_file1
+                        input_forcings.file_in1 = tmp_file1
+                        input_forcings.fcst_date2 = input_forcings.fcst_date1
+                        input_forcings.fcst_hour2 = input_forcings.fcst_hour1
+                        input_forcings.fcst_min2 = input_forcings.fcst_min1
+
                 else:
                     # The input window has shifted. Reset fields 2 to
                     # be fields 1.
