@@ -1725,7 +1725,7 @@ class ConfigOptions:
             # Check to make sure supplemental precip options make sense. Also read in the RQI threshold
             # if any radar products where chosen.
             for suppOpt in self.supp_precip_forcings:
-                if suppOpt < 0 or suppOpt > 15:
+                if suppOpt < 0 or suppOpt > 16:
                     err_out_screen(
                         "Please specify SuppForcing values between 1 and 15."
                     )
