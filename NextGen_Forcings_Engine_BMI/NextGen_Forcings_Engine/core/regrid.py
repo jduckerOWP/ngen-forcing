@@ -127,7 +127,6 @@ def get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config):
         mrms_grib2_name = mrms_gzfile.stem
         mrms_tmp_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
         ioMod.unzip_file(mrms_gzfile, mrms_tmp_grib2, config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
         supplemental_precip.file_in1_grib2.append(mrms_tmp_grib2)
 
     # Extract the second time stamp of MRMS sub-hourly data if required for the given cycle
@@ -138,20 +137,17 @@ def get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config):
             mrms_grib2_name = mrms_gzfile.stem
             mrms_tmp_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
             ioMod.unzip_file(mrms_gzfile, mrms_tmp_grib2, config_options, mpi_config)
-            err_handler.check_program_status(config_options, mpi_config)
             supplemental_precip.file_in2_grib2.append(mrms_tmp_grib2)
 
     # Extract the first and second time stamp of MRMS hourly data for the bias correction calculation
     mrms_grib2_name = supplemental_precip.file_in1_bc.stem
     mrms_hourly_tmp1_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
     ioMod.unzip_file(supplemental_precip.file_in1_bc,mrms_hourly_tmp1_grib2, config_options, mpi_config)
-    err_handler.check_program_status(config_options, mpi_config)
 
     if(len(supplemental_precip.tmpFile2_mrms_subhourly_timesteps) != 0):
         mrms_grib2_name = supplemental_precip.file_in2_bc.stem
         mrms_hourly_tmp2_grib2 = str(Path(config_options.scratch_dir) / f"{mrms_grib2_name}")
         ioMod.unzip_file(supplemental_precip.file_in2_bc,mrms_hourly_tmp2_grib2, config_options, mpi_config)
-        err_handler.check_program_status(config_options, mpi_config)
 
     # Open grib2 files associated with current AnA hour
     ds_subhourly = xr.open_mfdataset(supplemental_precip.file_in1_grib2,engine="cfgrib",concat_dim="time",combine="nested")
@@ -279,14 +275,14 @@ def get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config):
                 os_utils.os_remove_retry(f)
             except OSError:
                 config_options.errMsg = f"Unable to remove scratch file: {f}"
-                err_handler.log_critical(config_options, mpi_config)
+                LOG.warning(config_options.errMsg)
 
     if os.path.isfile(mrms_hourly_tmp1_grib2):
         try:
             os_utils.os_remove_retry(mrms_hourly_tmp1_grib2)
         except OSError:
             config_options.errMsg = f"Unable to remove scratch file: {mrms_hourly_tmp1_grib2}"
-            err_handler.log_critical(config_options, mpi_config)
+            LOG.warning(config_options.errMsg)
 
     if(len(supplemental_precip.tmpFile2_mrms_subhourly_timesteps) != 0):
         for f in supplemental_precip.file_in2_grib2:
@@ -295,14 +291,14 @@ def get_mrms_subhourly_avg(config_options,supplemental_precip,mpi_config):
                     os_utils.os_remove_retry(f)
                 except OSError:
                     config_options.errMsg = f"Unable to remove scratch file: {f}"
-                    err_handler.log_critical(config_options, mpi_config)
+                    LOG.warning(config_options.errMsg)
 
         if os.path.isfile(mrms_hourly_tmp2_grib2):
             try:
                 os_utils.os_remove_retry(mrms_hourly_tmp2_grib2)
             except OSError:
                 config_options.errMsg = f"Unable to remove scratch file: {mrms_hourly_tmp2_grib2}"
-                err_handler.log_critical(config_options, mpi_config)
+                LOG.warning(config_options.errMsg)
 
     return mrms_subhourly_final
 
