@@ -983,6 +983,15 @@ def python_ExactExtract_zarr(aorc_file, hyfabfile, add_offset, scale_factor, AOR
 
     #use cached subset
     ds_subset = get_cached_subset(timestamp.year, hyfabfile, AORC_met_vars)
+
+    # Patch the dimension ordering of the latitude dimension to conform with 
+    # ExactExtract rasterization standards for the database input. Latitude 
+    # dimensionality must start at the northern boundary, while longitude
+    # values must start at the western boundary of a given grid input in 
+    # order for ExactExtract to properly calculate the correct weights for
+    # the given grid cell features
+    ds_subset = ds_subset.sel(latitude=slice(None, None, -1))
+    
     all_vars_data = ds_subset.sel(time=timestamp.strftime('%Y-%m-%d %H:%M:%S'))
     
     lats = all_vars_data.latitude.values
