@@ -20,7 +20,7 @@ class RAPDownloader(ForecastDownloader):
 
     def get_download_targets(self, d_start):
         # RAP cycles at 03, 09, 15, 21 UTC produce 51-hour forecasts; others produce 21-hour forecasts
-        return range(0, 52) if d_start.hour in [3, 9, 15, 21] else range(0, 22)
+        return range(0, 52) if d_start.hour in [3, 9, 15, 21] else range(0, 19)
 
     def build_output_dir(self, d_start, _):
         # Output directory format: <out_dir>/rap.YYYYMMDD/
