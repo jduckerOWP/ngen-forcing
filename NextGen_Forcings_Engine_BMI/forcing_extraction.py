@@ -85,6 +85,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
         14: "Puerto_Rico/get_prod_NAM_Nest_Puerto_Rico_AnA.py",
         19: "Alaska/get_Alaska_HRRR.py",
         20: "Alaska/get_Alaska_HRRR_AnA.py",
+        26: "CONUS/get_conus_HRRR_subhourly_AnA.py",
         "supp1": "CONUS/get_conus_MRMS_Radar.py",
         "supp2": "CONUS/get_conus_MRMS_MultiSensor.py",
         "supp6": "Hawaii/get_MRMS_MultiSensor_Hawaii.py",
