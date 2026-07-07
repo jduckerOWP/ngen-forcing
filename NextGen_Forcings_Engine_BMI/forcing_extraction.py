@@ -98,7 +98,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
 
     # Extract forcing data from appropriate sources
     for i in range(len(input_forcings)):
-        # print(f"i: {i}, input_forcings[i]: {input_forcings[i]}, input_horizons[i]: {input_horizons[i]}, ")
+        #print(f"i: {i}, input_forcings[i]: {input_forcings[i]}, input_horizons[i]: {input_horizons[i]}, ")
 
         # Format extraction path
         extract_outPath = input_forcing_dirs[i]
@@ -111,10 +111,22 @@ def retrieve_forcing(cfg: "ConfigOptions"):
             look_back_hours = 1
             forcing_script = forcing_src.get(input_forcings[i])
             forcing_start_time = refcstbdate + timedelta(hours=1)
+            # We're setting a flag here to indicate the amount
+            # of GFS data needed to download based on the amount of
+            # input datasets to distinguish between medium range
+            # normal and blended confgiurations
+            if 3 in input_forcings and len(input_forcings) == 1:
+                gfs_extended = True
+            else:
+                gfs_extended = False
+        
             subhourly_avg = False
+
         elif ana_flag == 1:
             look_back_hours = int(look_back / 60)
             forcing_start_time = refcstbdate
+
+            gfs_extended = False
 
             if "supp16" in input_forcings and input_forcings[i] in ["supp16","supp2"]:
                 look_back_hours += 1
@@ -182,6 +194,7 @@ def retrieve_forcing(cfg: "ConfigOptions"):
             download_attempt_interval=download_attempt_interval,
             check_file_availability=check_file_availability,
             subhourly_avg=subhourly_avg,
+            gfs_extended=gfs_extended,
         )
 
         # Run the download

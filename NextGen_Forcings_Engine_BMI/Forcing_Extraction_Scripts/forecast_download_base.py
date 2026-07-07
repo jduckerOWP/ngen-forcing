@@ -41,7 +41,7 @@ class ForecastDownloader(ABC):
     default_cleanback = 240
     default_lagback = 6
 
-    def __init__(self, out_dir, start_time, lookback_hours, cleanback_hours, lagback_hours, ens_number, input_forcing, max_download_attempts, download_attempt_interval, check_file_availability, subhourly_avg):
+    def __init__(self, out_dir, start_time, lookback_hours, cleanback_hours, lagback_hours, ens_number, input_forcing, max_download_attempts, download_attempt_interval, check_file_availability, subhourly_avg, gfs_extended):
         """
         Initialize downloader with common configuration.
 
@@ -56,6 +56,7 @@ class ForecastDownloader(ABC):
         :param download_attempt_interval: The number of seconds you want to wait between each attempt to download a forcing file after a failure
         :param check_file_availability: An integer value that indicates whether or not to defer to just checking file availability rather than downloading files
         :param subhourly_avg: A boolean flag that indicates the forcing data product is being used for sub-hourly averaging, which flags a different check for AnA
+        :param gfs_extended: A boolean flag to indicate whether or not we need to download GFS 10-day or 16-day forecast based on operational configuration of interest
         """
         if lookback_hours <= lagback_hours:
             raise ValueError(
@@ -74,6 +75,7 @@ class ForecastDownloader(ABC):
         self.download_attempt_interval = download_attempt_interval
         self.check_file_availability = check_file_availability
         self.subhourly_avg = subhourly_avg
+        self.gfs_extended = gfs_extended
         
         # Self catching mechanism to infer last hour of user download request
         self.last_hour = None
@@ -126,6 +128,7 @@ class ForecastDownloader(ABC):
         parser.add_argument('--download_attempt_interval', type=int, default=30,help="How many seconds do you wait until you attempt to retry downloading a file that failed.")
         parser.add_argument('--check_file_availability', type=int, default=0, help="Bypass file downloading and just check to see if files are available to download. To implement specify 1, or omit you specify 0. Default is 0.")        
         parser.add_argument('--subhourly_avg',action="store_true",default=False,help="Indicate that the sub-hourly averaging method is being used for AnA cycle. (default: False)")
+        parser.add_argument('--gfs_extended',action="store_true",default=False,help="Indicate GFS 10-day vs 16-day downloading based on operational configuration of interest. (default: False)")
         args = parser.parse_args()
 
         print(f"{cls.__name__} args:", vars(args))
@@ -141,7 +144,8 @@ class ForecastDownloader(ABC):
             max_download_attempts=args.max_download_attempts,
             download_attempt_interval=args.download_attempt_interval,
             check_file_availability=args.check_file_availability,
-            subhourly_avg=subhourly_avg
+            subhourly_avg=subhourly_avg,
+            gfs_extended=gfs_extended
         )
 
     def run(self):
@@ -300,7 +304,6 @@ class ForecastDownloader(ABC):
             self.pre_download_hook(d_start)
 
             targets = self.get_download_targets(d_start)
-
             # Set last hour flag based on current hour of cycle
             if hour == final_hour:
                 self.last_hour = True
