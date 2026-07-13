@@ -102,7 +102,7 @@ def configure_logging():
     )
 
     log_level = translate_ngwpc_log_level(
-        os.getenv(EV_MODULE_LOGLEVEL, "INFO")
+        os.getenv(EV_MODULE_LOGLEVEL, "DEBUG")
     )
 
     module_fmt = MODULE_NAME.upper().ljust(LOG_MODULE_NAME_LEN)[:LOG_MODULE_NAME_LEN]
