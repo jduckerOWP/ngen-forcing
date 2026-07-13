@@ -3068,12 +3068,12 @@ def find_hourly_mrms_subhourly_neighbors(
                 pattern = f"{supplemental_precip.inDir}/MRMS_SubHourly/{date_path2}/MRMS_PrecipRate_00.00_{date_path2}-{hour2}{minute_str}00{supplemental_precip.file_ext}{gz_ext}"
                 file_path = Path(pattern)
                  if not os.path.isfile(file_path):
-                    if supplemental_precip.enforce == 1:
-                        config_options.errMsg = (
-                            "Expected input MRMS sub-hourly file: "
-                            + pattern
-                            + " not found."
-                        )
+                     if supplemental_precip.enforce == 1:
+                         config_options.errMsg = (
+                             "Expected input MRMS sub-hourly file: "
+                             + pattern
+                             + " not found."
+                         )
                         err_handler.log_critical(config_options, mpi_config)               
                 tmp_file2.append(file_path)
 
