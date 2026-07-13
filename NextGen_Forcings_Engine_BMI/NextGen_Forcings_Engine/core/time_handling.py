@@ -3052,6 +3052,14 @@ def find_hourly_mrms_subhourly_neighbors(
             minute_str = f"{minute_int:02d}"
             pattern = f"{supplemental_precip.inDir}/MRMS_SubHourly/{date_path1}/MRMS_PrecipRate_00.00_{date_path1}-{hour1}{minute_str}00{supplemental_precip.file_ext}{gz_ext}"
             file_path = Path(pattern)
+            if not os.path.isfile(file_path):
+                if supplemental_precip.enforce == 1:
+                    config_options.errMsg = (
+                        "Expected input MRMS sub-hourly file: "
+                        + pattern
+                        + " not found."
+                    )
+                    err_handler.log_critical(config_options, mpi_config)            
             tmp_file1.append(file_path)
 
         if(len(supplemental_precip.tmpFile2_mrms_subhourly_timesteps) != 0):
@@ -3059,6 +3067,14 @@ def find_hourly_mrms_subhourly_neighbors(
                 minute_str = f"{minute_int:02d}"
                 pattern = f"{supplemental_precip.inDir}/MRMS_SubHourly/{date_path2}/MRMS_PrecipRate_00.00_{date_path2}-{hour2}{minute_str}00{supplemental_precip.file_ext}{gz_ext}"
                 file_path = Path(pattern)
+                 if not os.path.isfile(file_path):
+                    if supplemental_precip.enforce == 1:
+                        config_options.errMsg = (
+                            "Expected input MRMS sub-hourly file: "
+                            + pattern
+                            + " not found."
+                        )
+                        err_handler.log_critical(config_options, mpi_config)               
                 tmp_file2.append(file_path)
 
     # First check for Pass 2 MRMS Multisensor QPE fields
