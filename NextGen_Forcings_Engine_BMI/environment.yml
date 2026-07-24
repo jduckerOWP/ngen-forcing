@@ -24,3 +24,4 @@ dependencies:
   - beautifulsoup4
   - python-dotenv
   - matplotlib
+  - cfgrib
