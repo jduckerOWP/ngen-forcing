@@ -386,6 +386,20 @@ class NWMv3ForcingEngineModel:
                     hours=config_options.sub_output_hour
                 )
 
+            # Implement QPF timestep flag to force precipitation fields to
+            # zero for the first 6 hours of the forecast if enabled
+            if future_time < 25200:
+                # If cold start is specified, then we allow first hour of
+                # forecast to still advertise rain rates even though qpf is enabled
+                if config_options.cold_start and future_time < 7200:
+                    config_options.qpf_timestep = False
+                elif config_options.qpf:
+                    config_options.qpf_timestep = True
+                else:
+                    config_options.qpf_timestep = False
+            else:
+                config_options.qpf_timestep = False
+
             # Compute the output timestamp for this step
             if config_options.ana_flag:
                 output_obj.outDate = (
@@ -813,6 +827,11 @@ class NWMv3ForcingEngineModel:
                 model[variable + "_NODE"] = output_obj.output_local[count, :].flatten()
         elif config_options.grid_type == "hydrofabric":
             for count, variable in enumerate(variables):
+                # Flag to indiciate a QPF implementation (No precipitation for first 6 hours of forecast)
+                if(config_options.qpf and config_options.qpf_timestep and variable == "RAINRATE"):
+                    print('qpf forcing precipitation to zero')
+                    output_obj.output_global[count, :] = 0.0
+
                 model[variable + "_ELEMENT"] = output_obj.output_global[
                     count, :
                 ].flatten()
