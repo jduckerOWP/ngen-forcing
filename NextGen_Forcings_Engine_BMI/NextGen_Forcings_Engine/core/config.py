@@ -145,6 +145,9 @@ class ConfigOptions:
         self.geogrid = geogrid_arg
         self.geopackage = None
         self.project = None
+        self.qpf = None
+        self.qpf_timestep = None
+        self.cold_start = None
 
     def validate_config(self, cfg_bmi: dict) -> None:
         """Validate in options from the configuration file and check that proper options were provided."""
@@ -163,6 +166,37 @@ class ConfigOptions:
                     "Unable to locate RefcstBDateProc under Logistics section in configuration file.",
                     e,
                 )
+
+        # Look to see if the qpf setting is set in configuration file, otherwise
+        # default the qpf setting to be False
+        if self.qpf is None:
+            try:
+                self.qpf = cfg_bmi.get(
+                    "qpf", None
+                )  # Default to False if not found
+                if self.qpf is None:
+                    self.qpf = False
+                else:
+                    self.qpf = True
+
+            except:
+                # Default the qpf to False
+                self.qpf = False
+
+        # Look to see if the cold start setting is set in configuration file, otherwise
+        # default the cold start setting to be False
+        if self.cold_start is None:
+            try:
+                self.cold_start = cfg_bmi.get(
+                    "coldstart", None
+                )  # Default to False if not found
+                if self.cold_start is None:
+                    self.cold_start = False
+                else:
+                    self.cold_start = True
+            except:
+                # Default the qpf to False
+                self.cold_start = False
 
         # Look to see if the project is set in configuration file, otherwise
         # default the project to noaa_owp
