@@ -829,7 +829,6 @@ class NWMv3ForcingEngineModel:
             for count, variable in enumerate(variables):
                 # Flag to indiciate a QPF implementation (No precipitation for first 6 hours of forecast)
                 if(config_options.qpf and config_options.qpf_timestep and variable == "RAINRATE"):
-                    print('qpf forcing precipitation to zero')
                     output_obj.output_global[count, :] = 0.0
 
                 model[variable + "_ELEMENT"] = output_obj.output_global[
