@@ -174,11 +174,15 @@ class ConfigOptions:
                 self.qpf = cfg_bmi.get(
                     "qpf", None
                 )  # Default to False if not found
+                
                 if self.qpf is None:
                     self.qpf = False
-                else:
+                elif self.qpf == 1:
                     self.qpf = True
-
+                elif self.qpf == 0:
+                    self.qpf = False
+                else:
+                    err_out_screen("User specified invalid qpf option. Valid values are 0 (off) or 1 (on) for this feature to be enabled.")
             except:
                 # Default the qpf to False
                 self.qpf = False
@@ -192,8 +196,12 @@ class ConfigOptions:
                 )  # Default to False if not found
                 if self.cold_start is None:
                     self.cold_start = False
-                else:
+                elif self.cold_start == 1:
                     self.cold_start = True
+                elif self.cold_start == 0:
+                    self.cold_start = False
+                else:
+                    err_out_screen("User specified invalid coldstart option. Valid values are 0 (off) or 1 (on) for this feature to be enabled.")
             except:
                 # Default the qpf to False
                 self.cold_start = False
