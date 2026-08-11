@@ -1,4 +1,5 @@
 import geopandas as gpd
+import shapely
 from shapely.ops import orient
 import netCDF4
 import numpy as np
@@ -19,7 +20,63 @@ hydrofabric domain configuration to utilize downscaling methods in the NextGen F
 
 Example Usage:  python NextGen_hyfab_to_ESMF_Mesh.py ./nextgen_01.gpkg -parquet ./vpu1.parquet ./NextGen_VPU01_Mesh.nc
 """
+def extract_largest_polygon(geom):
+    """
+    Guarantees that the returned object is a single Shapely Polygon.
+    Extracts the polygon with the largest area from MultiPolygons 
+    or GeometryCollections.
+    """
+    if geom is None or geom.is_empty:
+        return None
 
+    if geom.geom_type == "Polygon":
+        return geom
+    elif geom.geom_type == "MultiPolygon":
+        return max(geom.geoms, key=lambda a: a.area)
+    elif geom.geom_type == "GeometryCollection":
+        # Extract only Polygon geometries from the collection
+        polys = [g for g in geom.geoms if g.geom_type == "Polygon"]
+        if polys:
+            return max(polys, key=lambda a: a.area)
+        # If collection contained only lines/points after cleanup
+        return None
+    return None
+
+def clean_geometry_for_esmf(geom, i, grid_size=1e-6, simplify_tol=1e-6):
+    """
+    Cleans GIS vector geometries for safe 3D spherical triangulation in ESMF.
+    Always returns a single Polygon object with valid .exterior attributes.
+    """
+    if geom is None or geom.is_empty:
+        return None
+
+    # Ensure we start with a single Polygon
+    geom = extract_largest_polygon(geom)
+    if geom is None:
+        return None
+
+    # Fix self-intersecting geometries (e.g., bowties)
+    if not geom.is_valid:
+        print(f"element {i+1} has an invalid topology (e.g., bowtie)")
+        geom = shapely.make_valid(geom)
+        geom = extract_largest_polygon(geom)
+        if geom is None:
+            return None
+
+    # Snap coordinates to grid (~10cm) to collapse micro-spikes and hairpins
+    geom = shapely.set_precision(geom, grid_size=grid_size)
+    geom = extract_largest_polygon(geom)
+
+    # Simplify topology to remove redundant collinear points and hairpins
+    geom = geom.simplify(simplify_tol, preserve_topology=True)
+    geom = extract_largest_polygon(geom)
+
+    # Force Counter-Clockwise (CCW) winding order
+    if geom is not None and hasattr(geom, "exterior") and not geom.exterior.is_ccw:
+        print(f"element {i+1} is clockwise orientation, switching orientation.")
+        geom = orient(geom, sign=1.0)
+
+    return geom
 
 def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Path, parquet: pathlib.Path | None = None):
     """
@@ -93,32 +150,17 @@ def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Pa
     for i in range(element_count):
         # Extract geometry for each element
         geom = hyfab.geometry[i]
-    
-        # If the catchment consists of multiple disconnected parts, keep only the
-        # largest contiguous polygon to ensure a valid single-part ESMF element.
-        if geom.geom_type == "MultiPolygon":
-            geom = max(geom.geoms, key=lambda a: a.area)
+
+        # Clean geometry using ESMF compliance pipeline
+        geom = clean_geometry_for_esmf(geom, i)
+
+        # Get ESMF compliant geometries
+        sanitized_geoms.append(geom)
         
-        # Check for self-intersecting geometries (e.g., bowties) 
-        # and apply a zero-buffer fix to re-compute valid topology.
-        if not geom.is_valid:
-            geom = geom.buffer(0)
-            if geom.geom_type == "MultiPolygon":
-                geom = max(geom.geoms, key=lambda a: a.area)
-
-        # Check for clockwise winding order and force a counter-clockwise orientation.
-        # This ensures consistent surface normals and positive area calculations,
-        # preventing triangulation failures during ESMF area-weighted regridding.
-        if not geom.exterior.is_ccw:
-            geom = orient(geom, sign=1.0)
-
-
         # Count nodes (exclude closure point)
         nodes = len(geom.exterior.coords) - 1
         total_num_nodes += nodes
         element_num_nodes[i] = nodes
-        # Get ESMF compliant geometries
-        sanitized_geoms.append(geom)
 
 
     # Extract Coordinates sequentially
