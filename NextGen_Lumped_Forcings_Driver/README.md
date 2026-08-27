@@ -47,3 +47,15 @@ Water Model (NWM) Forcings Engine for operational forecast datasets (Optional ->
 
 The given user should utilize sample function calls for each forcings dataset available in the lumped forcings driver. The examples are shown within the Run_NextGen_lumped_driver.py script available in the repository.
 
+# Driver Script to Directly Execute the NextGen Lumped Forcings Driver
+
+Directly modify the `NextGen_lumped_forcings_driver` module within the `run.py` driver script with the user prescribed settings as discussed above. Once you're satisfy with the settings, then go ahead and directly call the `run.py` script with the following syntax:
+
+```
+python run.py /pathway/to/hydrofabric/gpkg -o /pathway/to/forcing/output/directory
+```
+Required Arguments:
+- The NextGen hydrofabric geopackage you use to extract forcing data from
+- The output directory you wish to store the netcdf/csv NextGen forcing file output
+
+
