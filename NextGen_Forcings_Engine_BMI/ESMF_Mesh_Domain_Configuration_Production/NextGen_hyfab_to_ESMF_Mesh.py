@@ -1,11 +1,16 @@
 import geopandas as gpd
+import shapely
+from shapely.ops import orient
 import netCDF4
 import numpy as np
 import pandas as pd
 import argparse
 import pathlib
 import scipy
-gpd.options.display_precision=16
+import os
+import uuid
+
+gpd.options.display_precision = 16
 np.set_printoptions(precision=128)
 
 """
@@ -15,50 +20,110 @@ hydrofabric domain configuration to utilize downscaling methods in the NextGen F
 
 Example Usage:  python NextGen_hyfab_to_ESMF_Mesh.py ./nextgen_01.gpkg -parquet ./vpu1.parquet ./NextGen_VPU01_Mesh.nc
 """
+def extract_largest_polygon(geom):
+    """
+    Guarantees that the returned object is a single Shapely Polygon.
+    Extracts the polygon with the largest area from MultiPolygons 
+    or GeometryCollections.
+    """
+    if geom is None or geom.is_empty:
+        return None
 
-def main(args):
+    if geom.geom_type == "Polygon":
+        return geom
+    elif geom.geom_type == "MultiPolygon":
+        return max(geom.geoms, key=lambda a: a.area)
+    elif geom.geom_type == "GeometryCollection":
+        # Extract only Polygon geometries from the collection
+        polys = [g for g in geom.geoms if g.geom_type == "Polygon"]
+        if polys:
+            return max(polys, key=lambda a: a.area)
+        # If collection contained only lines/points after cleanup
+        return None
+    return None
+
+def clean_geometry_for_esmf(geom, i, grid_size=1e-6, simplify_tol=1e-6):
+    """
+    Cleans GIS vector geometries for safe 3D spherical triangulation in ESMF.
+    Always returns a single Polygon object with valid .exterior attributes.
+    """
+    if geom is None or geom.is_empty:
+        return None
+
+    # Ensure we start with a single Polygon
+    geom = extract_largest_polygon(geom)
+    if geom is None:
+        return None
+
+    # Fix self-intersecting geometries (e.g., bowties)
+    if not geom.is_valid:
+        print(f"element {i+1} has an invalid topology (e.g., bowtie)")
+        geom = shapely.make_valid(geom)
+        geom = extract_largest_polygon(geom)
+        if geom is None:
+            return None
+
+    # Snap coordinates to grid (~10cm) to collapse micro-spikes and hairpins
+    geom = shapely.set_precision(geom, grid_size=grid_size)
+    geom = extract_largest_polygon(geom)
+
+    # Simplify topology to remove redundant collinear points and hairpins
+    geom = geom.simplify(simplify_tol, preserve_topology=True)
+    geom = extract_largest_polygon(geom)
+
+    # Force Counter-Clockwise (CCW) winding order
+    if geom is not None and hasattr(geom, "exterior") and not geom.exterior.is_ccw:
+        print(f"element {i+1} is clockwise orientation, switching orientation.")
+        geom = orient(geom, sign=1.0)
+
+    return geom
+
+def convert_hyfab_to_esmf(hyfab_gpkg: pathlib.Path, esmf_mesh_output: pathlib.Path, parquet: pathlib.Path | None = None):
+    """
+    Convert NextGen Hydrofabric geopackage into ESMF Mesh format
+
+    :param hyfab_gpkg: Path to the hydrofabric geopackage file
+    :param esmf_mesh_output: Path to the output ESMF mesh file
+    :param parquet: Optional parquet file with hydrofabric model attributes
+    """
+
     # Open hydrofabric geopackage file and
     # save copy of original cartesian coordinate system
     # for orientation properties since there are issues
     # with geopandas for converting crs and translating
     # orientation of polygon from original dataset
-    hyfab = gpd.read_file(args.hyfab_gpkg,layer='divides')
-    hyfab_cart = hyfab
+    hyfab = gpd.read_file(hyfab_gpkg, layer='divides')
+
     # convert hydrofabric data to spherical coordiantes
     hyfab = hyfab.to_crs('WGS84')
 
     # Eventually, we'll add code to slice catchment ids
     # but for now just use feature ids
-    element_ids = np.array(np.array([elem.split('-')[1] for elem in np.array(hyfab.divide_id.values,dtype=str)],dtype=float),dtype=int)
-    hyfab_coords = np.empty((len(element_ids),2),dtype=float)
-    hyfab_coords[:,0] = element_ids
-    hyfab_coords[:,1] = element_ids
-
+    element_ids = np.array(np.array([elem.split('-')[1] for elem in np.array(hyfab.divide_id.values, dtype=str)], dtype=float), dtype=int)
+    hyfab_coords = np.empty((len(element_ids), 2), dtype=float)
+    hyfab_coords[:, 0] = element_ids
+    hyfab_coords[:, 1] = element_ids
 
     # Sort data by feature id and reset index
     hyfab['element_id'] = element_ids
-    hyfab_cart['element_id'] = element_ids
-    hyfab = hyfab.sort_values(by=['element_id'])
-    hyfab_cart = hyfab_cart.sort_values(by=['element_id'])
-    hyfab = hyfab.reset_index()
-    hyfab_cart = hyfab_cart.reset_index()
+    hyfab = hyfab.sort_values(by=['element_id']).reset_index(drop=True)
 
     # Flag to see if user specified the hydrofabric parquet file for either VPU, subset, of CONUS
-    if(args.parquet != None):
+    if parquet is not None and os.path.isfile(parquet):
 
         # Open hydrofabric v2 parquet file containing the forcing
         # metadata that highlights catchment characteristics that
         # are needed to implement NCAR bias calibration and
         # downscaling methods within the forcings engine
-        forcing_metadata = pd.read_parquet(args.parquet)
-        forcing_metadata = forcing_metadata[['divide_id', 'elevation_mean', 'slope_mean','aspect_c_mean','X', 'Y']]
+        forcing_metadata = pd.read_parquet(parquet)
+        forcing_metadata = forcing_metadata[['divide_id', 'elevation_mean', 'slope_mean', 'aspect_c_mean', 'X', 'Y']]
         forcing_metadata = forcing_metadata.sort_values('divide_id')
         forcing_metadata = forcing_metadata.reset_index()
 
-        element_ids_parquet = np.array(np.array([elem.split('-')[1] for elem in np.array(forcing_metadata.divide_id.values,dtype=str)],dtype=float),dtype=int)
-        parquet_coords = np.empty((len(element_ids_parquet),2),dtype=float)
-        parquet_coords[:,0] = element_ids_parquet
-        parquet_coords[:,1] = element_ids_parquet
+        element_ids_parquet = np.array(np.array([elem.split('-')[1] for elem in np.array(forcing_metadata.divide_id.values, dtype=str)], dtype=float), dtype=int)
+        parquet_coords = np.empty((len(element_ids_parquet), 2), dtype=float)
+        parquet_coords[:, 0] = element_ids_parquet
+        parquet_coords[:, 1] = element_ids_parquet
 
         dist, idx = scipy.spatial.KDTree(parquet_coords).query(hyfab_coords)
 
@@ -67,201 +132,160 @@ def main(args):
         hyfab['slope_azmuith'] = forcing_metadata.aspect_c_mean.values[idx]
 
         # remove metadata file to clear space
-        del(forcing_metadata)
+        del (forcing_metadata)
 
     # Get element count
     element_count = len(hyfab.element_id)
 
+    # Array for describing number of nodes per element
+    element_num_nodes = np.empty(element_count, dtype=np.int32)
 
-    # find the number of nodes in first element
-    # based on geometry type
-    if(hyfab.geometry[0].geom_type == "Polygon"):
-        dup_df = pd.DataFrame([])
-        dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[0].exterior.coords.xy
-        dup_df = dup_df.drop_duplicates(subset=['node_x','node_y'],keep='first')
-        elem_max_nodes = len(dup_df)
-    else:
-        dup_df = pd.DataFrame([])
-        dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[0].geoms._get_geom_item(0).exterior.xy
-        dup_df = dup_df.drop_duplicates(subset=['node_x','node_y'],keep='first')
-        elem_max_nodes = len(dup_df)
-
-    # Allocate element arrays for center point calculations
-    # within hyrofabric data
-    element_num_nodes = np.empty(element_count,dtype=np.int32)
-    element_x_coord = np.empty(element_count,dtype=np.double)
-    element_y_coord = np.empty(element_count,dtype=np.double)
-    if(args.parquet != None):
-        element_elevation = np.empty(element_count,dtype=np.double)
-        element_slope = np.empty(element_count,dtype=np.double)
-        element_slope_azmuith = np.empty(element_count,dtype=np.double)
-
-    # Get the total number of nodes
-    # throughout the entire hydrofabric domain
-    # based on geometry type
+    #Initialize the total number of nodes variable
     total_num_nodes = 0
+
+    # Sanitized geometry list to ensure ESMF Mesh compliance
+    # with the given hydrofabric
+    sanitized_geoms = []
+
     for i in range(element_count):
-        if(hyfab.geometry[i].geom_type == "Polygon"):
-            dup_df = pd.DataFrame([])
-            dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[i].exterior.coords.xy
-            dup_df = dup_df.drop_duplicates(subset=['node_x','node_y'],keep='first')
-            total_num_nodes += len(dup_df)
-        else:
-            dup_df = pd.DataFrame([])
-            dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[i].geoms._get_geom_item(0).exterior.xy
-            dup_df = dup_df.drop_duplicates(subset=['node_x','node_y'],keep='first')
-            total_num_nodes += len(dup_df)
+        # Extract geometry for each element
+        geom = hyfab.geometry[i]
 
-    # assign current node id and allocate node arrays to extract
-    # data from hydrofabric below
-    node_id = np.arange(total_num_nodes)+1
-    node_x_coord = np.empty(total_num_nodes,dtype=np.double)
-    node_y_coord = np.empty(total_num_nodes,dtype=np.double)
-    node_start = 0
+        # Clean geometry using ESMF compliance pipeline
+        geom = clean_geometry_for_esmf(geom, i)
 
-    # Extract node coordinates, calculate element data,
-    # calculate max element of nodes through hydrofabric, and
-    # flip node coordinates based on orientation of polygons
-    # from the original cartesian coordinate system
-    for i in range(element_count):
-        if(hyfab.geometry[i].geom_type == "Polygon"):
-            dup_df = pd.DataFrame([])
-            dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[i].exterior.coords.xy
-            dup_df = dup_df.drop_duplicates(subset=['node_x','node_y'],keep='first')
-            node_x = dup_df.node_x.values
-            node_y = dup_df.node_y.values
-            ccw = hyfab_cart.geometry[i].exterior.is_ccw
-        else:
-            dup_df = pd.DataFrame([])
-            dup_df['node_x'], dup_df['node_y'] = hyfab.geometry[i].geoms._get_geom_item(0).exterior.xy
-            dup_df = dup_df.drop_duplicates(subset=['node_x','node_y'],keep='first')
-            node_x = dup_df.node_x.values
-            node_y = dup_df.node_y.values
-            ccw = hyfab_cart.geometry[i].geoms._get_geom_item(0).exterior.is_ccw
+        # Get ESMF compliant geometries
+        sanitized_geoms.append(geom)
+        
+        # Count nodes (exclude closure point)
+        nodes = len(geom.exterior.coords) - 1
+        total_num_nodes += nodes
+        element_num_nodes[i] = nodes
 
-        num_nodes = len(node_x)
-        element_num_nodes[i] = num_nodes
-        if(num_nodes > elem_max_nodes):
-            elem_max_nodes = num_nodes
 
-        element_x_coord[i] = hyfab.geometry[i].centroid.coords.xy[0][0]
-        element_y_coord[i] = hyfab.geometry[i].centroid.coords.xy[1][0]
+    # Extract Coordinates sequentially
+    node_x_coord = np.empty(total_num_nodes, dtype=np.double)
+    node_y_coord = np.empty(total_num_nodes, dtype=np.double)
+    element_x_coord = np.empty(element_count, dtype=np.double)
+    element_y_coord = np.empty(element_count, dtype=np.double)
 
-        if(args.parquet != None):
-            element_elevation[i] = hyfab.elevation[i]
-            element_slope[i] = hyfab.slope[i]
-            element_slope_azmuith[i] = hyfab.slope_azmuith[i]
+    node_ptr = 0
+    # Loop over sanitized geometries
+    for i, geom in enumerate(sanitized_geoms):
+        # Get geometry for the given element (catchment)
+        coords = np.array(geom.exterior.coords)[:-1]
+        # Get number of nodes associated with element
+        num_nodes = element_num_nodes[i]
 
-        if(ccw):
-            node_x_coord[node_start:node_start+num_nodes] = np.array(node_x,dtype=np.double)
-            node_y_coord[node_start:node_start+num_nodes] = np.array(node_y,dtype=np.double)
-        else:
-            node_x_coord[node_start:node_start+num_nodes] = np.array(np.concatenate([[node_x[0]],np.flip(node_x[1:])]),dtype=np.double)
-            node_y_coord[node_start:node_start+num_nodes] = np.array(np.concatenate([[node_y[0]],np.flip(node_y[1:])]),dtype=np.double)
-        node_start += num_nodes
+        # Assign the x and y node coordinates for the given element
+        node_x_coord[node_ptr:node_ptr + num_nodes] = coords[:, 0]
+        node_y_coord[node_ptr:node_ptr + num_nodes] = coords[:, 1]
 
-    # Assign node data to pandas dataframe
-    # and calculate the duplicate nodes throughout
-    # the hydrofabric geometry network
-    node_connectivity = pd.DataFrame([])
-    node_connectivity['node_x'] = node_x_coord
-    node_connectivity['node_y'] = node_y_coord
+        # Calculate centers
+        element_x_coord[i] = geom.centroid.x
+        element_y_coord[i] = geom.centroid.y
 
-    duplicates = node_connectivity[node_connectivity.duplicated(keep='first')]
+        # Iterate over number of nodes associated with previous element
+        node_ptr += num_nodes
 
-    # Create array to assign duplicate nodes as
-    # zeroes, while creating unique ids for only
-    # the first instance of the unique node
-    duplicates_index = duplicates.index
-    node_id_connectivity = np.empty(len(node_id),dtype=np.int32)
-    node_count = 1
-    for i in range(len(node_id)):
-        if(i in duplicates_index):
-            node_id_connectivity[i] = 0
-        else:
-            node_id_connectivity[i] = node_count
-            node_count += 1
+    # Global Node Unification : matches shared nodes between catchments to reduce file size
+    node_df = pd.DataFrame({'x': node_x_coord, 'y': node_y_coord})
+    # Group identical coordinates and assign a unique global ID
+    node_df['global_id'] = node_df.groupby(['x', 'y']).ngroup() + 1
 
-    # Assign new node id network to dataframe
-    node_connectivity['node_id'] = node_id_connectivity
+    # Final node connectivity of the mesh
+    node_connectivity = node_df['global_id'].values.astype(np.int32)
 
-    # calculate the node id network to include its duplicate ids
-    # for each instance of the node coordinates
-    ESMF_node_id_connectivity = node_connectivity.groupby(['node_x','node_y']).node_id.transform('max')
+    # Extract unique coordinates for the nodeCoords variable
+    unique_nodes = node_df.drop_duplicates('global_id').sort_values('global_id')
+    node_count = len(unique_nodes)
+    node_x = unique_nodes['x'].values
+    node_y = unique_nodes['y'].values
 
-    node_connectivity['node_id_connectivity'] = ESMF_node_id_connectivity.values
+    # Get the pathway of the output directory and associated base name of file
+    out_dir = os.path.dirname(esmf_mesh_output)
+    base = os.path.basename(esmf_mesh_output)
 
-    node_connectivity_final = node_connectivity.node_id_connectivity.values
-
-    # Extract only the unique node id network and respective coordinates
-    node_connectivity = node_connectivity.drop_duplicates('node_id_connectivity')
-    node_count = len(node_connectivity)
-    node_x_coord_final = node_connectivity.node_x.values
-    node_y_coord_final = node_connectivity.node_y.values
-
-    # Calculate element connectivity from node id
-    # network that includes duplicates
-    elementConn = np.empty((element_count,elem_max_nodes),dtype=np.int32)
-    elementConn[:,:] = -1
-    start_index = 0
-    end_index = 0
-    for i in range(element_count):
-        end_index += element_num_nodes[i]
-        elementConn[i,0:element_num_nodes[i]] = node_connectivity_final[start_index:end_index]
-        start_index = end_index
+    # Format: .<filename>.tmp.<UUID>
+    # Hidden temp file tied to the final filename, guaranteed unique
+    temp_path = os.path.join(out_dir, f".{base}.tmp.{uuid.uuid4()}")
 
     # Create ESMF mesh netcdf file
-    nc = netCDF4.Dataset(args.esmf_mesh_output, "w", format="NETCDF4")
+    nc = netCDF4.Dataset(temp_path, "w", format="NETCDF4")
     node_count_dim = nc.createDimension("nodeCount", node_count)
     elem_count_dim = nc.createDimension("elementCount", element_count)
-    elem_conn_count_dim = nc.createDimension("connectionCount", len(node_connectivity_final))
+    elem_conn_count_dim = nc.createDimension("connectionCount", len(node_connectivity))
     node_count_dim = nc.createDimension("coordDim", 2)
-    node_coords_var = nc.createVariable("nodeCoords",'f8',("nodeCount","coordDim"))
+    node_coords_var = nc.createVariable("nodeCoords", 'f8', ("nodeCount", "coordDim"))
     node_coords_var.units = "degrees"
-    elem_id = nc.createVariable("element_id","i","elementCount")
+    elem_id = nc.createVariable("element_id", "i", "elementCount")
     elem_id.long_name = "Catchment ID for hydrofabric"
-    elem_conn_var = nc.createVariable("elementConn","i4",("connectionCount"))
+    elem_conn_var = nc.createVariable("elementConn", "i4", ("connectionCount"))
     elem_conn_var.long_name = "Node Indices that define the element connectivity"
-    num_elem_conn_var = nc.createVariable("numElementConn","i","elementCount")
+    num_elem_conn_var = nc.createVariable("numElementConn", "i", "elementCount")
     num_elem_conn_var.long_name = "Number of nodes per element"
-    center_coords_var = nc.createVariable("centerCoords",'f8',("elementCount","coordDim"))
+    center_coords_var = nc.createVariable("centerCoords", 'f8', ("elementCount", "coordDim"))
     center_coords_var.units = "degrees"
     nc.gridType = "unstructured"
     nc.version = "0.9"
 
+
     # Flag to whether include hydrofabric metadata if parquet file was specified
-    if(args.parquet != None):
-        hgt_elem_var = nc.createVariable("Element_Elevation","f8",("elementCount"))
+    if parquet is not None and os.path.isfile(parquet):
+        hgt_elem_var = nc.createVariable("Element_Elevation", "f8", ("elementCount"))
         hgt_elem_var.long_name = "Catchment height above sea level"
         hgt_elem_var.units = "meters"
-        slope_elem_var = nc.createVariable("Element_Slope","f8",("elementCount"))
+        slope_elem_var = nc.createVariable("Element_Slope", "f8", ("elementCount"))
         slope_elem_var.long_name = "Catchment slope"
         slope_elem_var.units = "meters"
-        slope_azi_elem_var = nc.createVariable("Element_Slope_Azmuith","f8",("elementCount"))
+        slope_azi_elem_var = nc.createVariable("Element_Slope_Azmuith", "f8", ("elementCount"))
         slope_azi_elem_var.long_name = "Catchment slope azmuith angle"
         slope_azi_elem_var.units = "Degrees"
-        hgt_elem_var[:] = element_elevation
-        slope_elem_var[:] = element_slope
-        slope_azi_elem_var[:] = element_slope_azmuith
+        hgt_elem_var[:] = hyfab.elevation.values
+        slope_elem_var[:] = hyfab.slope.values
+        slope_azi_elem_var[:] = hyfab.slope_azmuith.values
 
-    node_coords_var[:, 0] = node_x_coord_final
-    node_coords_var[:, 1] = node_y_coord_final
-    elem_conn_var[:] = node_connectivity_final
+    node_coords_var[:, 0] = node_x
+    node_coords_var[:, 1] = node_y
+    elem_conn_var[:] = node_connectivity
     num_elem_conn_var[:] = element_num_nodes
-    center_coords_var[:,0] = element_x_coord
-    center_coords_var[:,1] = element_y_coord
+    center_coords_var[:, 0] = element_x_coord
+    center_coords_var[:, 1] = element_y_coord
     elem_id[:] = hyfab.element_id.values
+
+    nc.sync()
     nc.close()
+
+    try:
+        os.link(temp_path, esmf_mesh_output)
+
+        # Give up the temporary name. The underlying file remains,
+        # because 'esmf_mesh_output' now points to the same inode.
+        os.remove(temp_path)
+
+    except FileExistsError:
+        # Another process already published the file.
+        os.remove(temp_path)
+
 
 def get_options():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('hyfab_gpkg', type=pathlib.Path, help="Hydrofabric geopackage file pathway")
-    parser.add_argument('-parquet',type=pathlib.Path, nargs='?', default = None, help="Hydrofabric parquet file pathway containing the model-attributes of the VPU or subset. This is only required if a user wants to utilize downscaling methods within the NextGen Forcings Engine")
+    parser.add_argument('-parquet', type=pathlib.Path, nargs='?', default=None, help="Hydrofabric parquet file pathway containing the model-attributes of the VPU or subset. This is only required if a user wants to utilize downscaling methods within the NextGen Forcings Engine")
     parser.add_argument("esmf_mesh_output", type=pathlib.Path, help="File pathway to save ESMF netcdf mesh file for hydrofabric")
 
     return parser.parse_args()
 
-if __name__ == "__main__":
+
+def main():
     args = get_options()
-    main(args)
+    convert_hyfab_to_esmf(
+        hyfab_gpkg=args.hyfab_gpkg,
+        esmf_mesh_output=args.esmf_mesh_output,
+        parquet=args.parquet
+    )
+
+
+if __name__ == "__main__":
+    main()
