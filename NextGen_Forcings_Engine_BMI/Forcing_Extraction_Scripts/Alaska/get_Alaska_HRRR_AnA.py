@@ -23,12 +23,9 @@ class AlaskaHRRRDownloader(ForecastDownloader):
     def should_process_hour(self, d_start):
         return d_start.hour % 3 == 0
 
-    def get_download_targets(self, d_start):
-        # Forecast hours vary depending on cycle
-        if d_start.hour % 3 == 0:
-            return range(0, 49) if d_start.hour == 0 else range(0, 19)
-        else:
-            return []  # Skip non-forecast cycles
+    def get_download_targets(self, _):
+        # Only download forecast hours 01-04
+        return [1, 2, 3, 4]
 
     def build_output_dir(self, d_start, _):
         return os.path.join(self.out_dir, "hrrr." + d_start.strftime('%Y%m%d'), "alaska")
@@ -39,8 +36,7 @@ class AlaskaHRRRDownloader(ForecastDownloader):
         """
         fhr_str = str(fhr).zfill(2)
         filename = f"hrrr.t{d_start.strftime('%H')}z.wrfsfcf{fhr_str}.ak.grib2"
-        date_path = "hrrr." + d_start.strftime('%Y%m%d')
-        url = os.path.join(self.base_url, date_path, "alaska", filename)
+        url = os.path.join(self.base_url, f"hrrr.{d_start.strftime('%Y%m%d')}", "alaska", filename)
         return url, filename
 
 
