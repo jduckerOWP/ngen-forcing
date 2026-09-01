@@ -14,8 +14,6 @@ from datetime import datetime, timedelta
 
 import yaml
 from types import SimpleNamespace
-from git_util import print_git_info_all
-
 
 def execute(forcing_config_input: str, output_path: str = None, csv_path: str = None, np: str = None):
     """
@@ -33,7 +31,6 @@ def execute(forcing_config_input: str, output_path: str = None, csv_path: str = 
     :param np: Optional number of processes to use.
     :return: None
     """
-    print_git_info_all()
 
     # Read in forcing engine configuration file
     with open(forcing_config_input, 'r') as forcing_config_file:

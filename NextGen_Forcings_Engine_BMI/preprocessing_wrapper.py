@@ -15,7 +15,6 @@ from datetime import datetime, timedelta
 
 import yaml
 from types import SimpleNamespace
-from git_util import print_git_info_all
 
 import forcing_extraction
 import esmf_creation
@@ -34,7 +33,6 @@ def execute(forcing_config_input: str):
     :param forcing_config_input: Path to forcing engine configuration file for forecast run
     :return: None
     """
-    print_git_info_all()
 
     # Read in forcing engine configuration file
     with open(forcing_config_input, 'r') as forcing_config_file:
