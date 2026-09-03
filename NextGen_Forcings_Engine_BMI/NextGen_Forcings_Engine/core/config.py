@@ -13,9 +13,29 @@ from .err_handler import (
 from .time_handling import (
     calculate_lookback_window,
 )
-from nextgen_forcings_ewts import MODULE_NAME
 
-LOG = logging.getLogger(MODULE_NAME)
+# Import modules for Forcing Engine logging
+import sys
+import logging
+
+# Get log level string from environment variable (defaults to 'INFO' if unset)
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# Convert string ('DEBUG', 'INFO', 'WARNING', etc.) to logging level constant
+log_level = logging.getLevelName(log_level_str)
+
+# Fallback check in case an invalid string was passed in the environment variable
+if not isinstance(log_level, int):
+    log_level = logging.INFO
+
+# Configure logging directly to stdout
+logging.basicConfig(
+    level=log_level,
+    stream=sys.stdout,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+LOG = logging.getLogger()
 
 FORCE_COUNT = 27
 
