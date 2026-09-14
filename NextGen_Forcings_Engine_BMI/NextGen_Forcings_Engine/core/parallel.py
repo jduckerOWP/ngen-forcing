@@ -4,7 +4,6 @@ import uuid
 
 import mpi4py
 import numpy as np
-import os
 
 from mpi4py import MPI
 

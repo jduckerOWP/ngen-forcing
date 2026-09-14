@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 # This is the NextGen Forcings Engine BMI instance to execute
-from NextGen_Forcings_Engine.bmi_model import NWMv3_Forcing_Engine_BMI_model
+from NextGen_Forcings_Engine.bmi_model import NextGen_Forcing_Engine_BMI_model
 
 
 def run_bmi(

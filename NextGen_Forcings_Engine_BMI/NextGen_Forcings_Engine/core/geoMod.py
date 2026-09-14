@@ -21,6 +21,7 @@ except ImportError:
 # Import modules for Forcing Engine logging
 import sys
 import logging
+import os
 
 # Get log level string from environment variable (defaults to 'INFO' if unset)
 log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()

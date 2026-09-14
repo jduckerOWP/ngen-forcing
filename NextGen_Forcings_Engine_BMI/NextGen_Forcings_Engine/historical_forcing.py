@@ -24,10 +24,29 @@ from .core.config import (
     ConfigOptions,
 )
 from .core.parallel import MpiConfig
-from nextgen_forcings_ewts import MODULE_NAME
 
-LOG = logging.getLogger(MODULE_NAME)
+# Import modules for Forcing Engine logging
+import sys
+import logging
 
+# Get log level string from environment variable (defaults to 'INFO' if unset)
+log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+
+# Convert string ('DEBUG', 'INFO', 'WARNING', etc.) to logging level constant
+log_level = logging.getLevelName(log_level_str)
+
+# Fallback check in case an invalid string was passed in the environment variable
+if not isinstance(log_level, int):
+    log_level = logging.INFO
+
+# Configure logging directly to stdout
+logging.basicConfig(
+    level=log_level,
+    stream=sys.stdout,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
+LOG = logging.getLogger()
 
 class BaseProcessor:
     """Base class for data processors."""
