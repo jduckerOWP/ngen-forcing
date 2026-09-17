@@ -1,14 +1,15 @@
 #!/bin/bash
 
-#SBATCH -n 3
-#SBATCH --time=01:00:00
-#SBATCH --job-name=ngen-forcing-preprocessing
+#SBATCH -n 5
+#SBATCH --time=00:30:00
+
+#SBATCH --job-name=ngen-forcing
+
 #SBATCH --account=ohd
-#SBATCH --error=forcing_preprocess_error.log
-#SBATCH --output=forcing_preprocess_output.log
+#SBATCH --error=ngen_forcing_error.log
+#SBATCH --output=ngen_forcing_output.log
 
-#SBATCH -p u1-service
-
+#SBATCH --exclusive
 
 module load intel-oneapi-compilers/2025.2.1
 module load intel-oneapi-mpi/2021.16.1
@@ -20,28 +21,31 @@ export CC=mpiicx
 export CXX=mpiicpx
 
 export ESMFMKFILE=/scratch3/NCEPDEV/ohd/Jason.Ducker/esmf/lib/libO/Linux.intel.64.intelmpi.default/esmf.mk
-
 export WGRIB2=/apps/wgrib2/3.1.3/gnu_11.4.1/wmo/bin/wgrib2
 
 export PYTHONPATH=$PYTHONPATH:$(pwd)/nextgen_forcings_ewts/src
 
 export PYTHON=/scratch4/NCEPDEV/ohd/Jason.Ducker/miniconda3/envs/ngen_engine/bin/python
 
+export TOTAL_CORES=$(($SLURM_JOB_NUM_NODES * $SLURM_CPUS_ON_NODE))
 
 echo -n "Begin time: "
 date
 
 #------------------------------------------------------------
 # Run the program
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/standard_ana_config.yml
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/standard_ana_config_subhourly.yml
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/extended_ana_config.yml
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/short_range_config.yml
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/short_range_qpf0_config.yml
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/short_range_subhourly_cycling_config.yml
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/medium_range_config.yml
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/medium_range_blend_config.yml
-#$PYTHON preprocessing_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/long_range_mem1_config.yml
+
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/standard_ana_config.yml -output_path ./Scratch/AnA -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/standard_ana_config_subhourly.yml -output_path ./Scratch/AnA_SubHourly -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/extended_ana_config.yml -output_path ./Scratch/Extended_AnA -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/short_range_config.yml -output_path ./Scratch/Short_Range -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/short_range_qpf0_config.yml -output_path ./Scratch/Short_Range_QPF0 -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/short_range_subhourly_cycling_config.yml -output_path ./Scratch/Short_Range_SubHourly -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/medium_range_config.yml -output_path ./Scratch/Medium_Range -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/medium_range_blend_config.yml -output_path ./Scratch/Medium_Range_Blend -np $SLURM_NTASKS
+#$PYTHON bmi_wrapper.py ./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files/long_range_mem1_config.yml -output_path ./Scratch/Long_Range -np $SLURM_NTASKS
+
+report-mem
 
 echo -n "End time: "
 date
