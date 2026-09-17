@@ -141,66 +141,6 @@ def check_program_status(
     # their error flag, since non-0 ranks do not block on reduce().
     MpiConfig.comm.barrier()
 
-
-def init_log(ConfigOptions, MpiConfig):
-    """Initialize the per-cycle log file once on rank 0.
-
-    Initialize the per‑cycle log file once on rank 0.
-    We only want a single log file per cycle—not one per catchment—so we check
-    existing FileHandlers to avoid opening multiple handlers for the same file.
-    """
-    # Only the master rank sets up logging
-    if MpiConfig.rank != 0:
-        return
-
-    global log_name
-    global LOG
-
-    # Check for ngen Error and Warning Trapping System named logger
-    logger = logging.getLogger(MODULE_NAME)
-
-    # checking whether the logger object has an attribute named _initialized,
-    # and if it does, whether its value is True. If the attribute doesn't exist,
-    # it defaults to False.
-    if getattr(logger, "_initialized", False):
-        for handler in logger.handlers:
-            if isinstance(handler, logging.FileHandler):
-                ConfigOptions.logFile = handler.baseFilename
-                break
-        log_name = MODULE_NAME
-        LOG = logger
-        return  # logger already initialized, nothing else to do
-
-    log_name = "logForcing"
-    filename = ConfigOptions.logFile
-
-    try:
-        logger = logging.getLogger(log_name)
-
-        # If a FileHandler for this filename is already attached, skip (prevents one log per catchment)
-        for handler in logger.handlers:
-            if (
-                isinstance(handler, FileHandler)
-                and getattr(handler, "baseFilename", None) == filename
-            ):
-                LOG = logger
-                return
-
-        # Otherwise, create and attach a new FileHandler
-        formatter = logging.Formatter(
-            "[%(asctime)s]: %(levelname)s - %(message)s", datefmt="%m/%d %H:%M:%S"
-        )
-        file_handler = FileHandler(filename, mode="a")
-        file_handler.setFormatter(formatter)
-        logger.addHandler(file_handler)
-        logger.setLevel(logging.INFO)
-        LOG = logger
-
-    except Exception as e:
-        ConfigOptions.errMsg = f"Unable to initialize log file '{filename}': {e}"
-        err_out_screen_para(ConfigOptions.errMsg, MpiConfig)
-
-
 def err_out(ConfigOptions):
     """Error out after an error message has been logged for a forecast cycle.
 

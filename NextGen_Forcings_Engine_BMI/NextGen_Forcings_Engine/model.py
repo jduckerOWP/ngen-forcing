@@ -310,12 +310,6 @@ class NextGenForcingEngineModel:
                 config_options.scratch_dir, log_filename
             )
 
-            # Initialize logging
-            try:
-                err_handler.init_log(config_options, mpi_config)
-            except Exception:
-                err_handler.err_out_screen_para(config_options.errMsg, mpi_config)
-
             err_handler.check_program_status(config_options, mpi_config)
         return (
             config_options,
