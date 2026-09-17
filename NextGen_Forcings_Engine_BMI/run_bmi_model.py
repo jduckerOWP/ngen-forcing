@@ -38,7 +38,7 @@ def run_bmi(
     ngen_datetimes = pd.date_range(start=start_time, end=end_time, freq="h")
 
     print("Creating an instance of the BMI model object")
-    model = NWMv3_Forcing_Engine_BMI_model()
+    model = NextGen_Forcing_Engine_BMI_model()
 
     print("Initializing the BMI model")
     # Set the path for the config file, using the default if none is provided
