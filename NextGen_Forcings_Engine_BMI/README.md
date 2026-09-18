@@ -42,7 +42,7 @@ This application streamlines forcing file production for all National Water Mode
 ## Setup and Execution Guide
 
 1. **Configure Execution Options**:
-   Navigate to `./BMI_NextGen_Configs/config_templates` and select the appropriate template for your domain and NWM v3.0 configuration. Copy the selected `config.yml` into the working directory containing `bmi_wrapper.py`.
+   Navigate to `./BMI_NextGen_Configs/CONUS/Ensemble_MVP_Config_Files` and select the appropriate template for your domain and NWM v3.1 configuration. Copy the selected `config.yml` into the working directory containing `bmi_wrapper.py`.
 
 2. **Execute the BMI Workflow**:
    Run the driver script via `mpirun` specifying the path to your configuration file, output directory, and total MPI processes:
