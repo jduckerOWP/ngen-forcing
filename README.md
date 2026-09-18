@@ -30,7 +30,7 @@ This directory contains Python modules and a driver script designed to extract a
   * **HRRR**: High-Resolution Rapid Refresh
 * **Configuration Support**: Supports standard National Water Model (NWM) operational configurations, including Reanalysis, Analysis & Assimilation (AnA), Short-Range, Medium-Range, and Long-Range.
 
-> **Documentation & Setup**: Setup, installation, and execution examples are further detailed in the `README.md` file within the directory as well as its dedicated Wiki Pages subsection.
+> **Documentation & Setup**: Setup, installation, and execution examples are further detailed in the `README.md` file within the directory.
 
 ---
 
@@ -47,4 +47,4 @@ This directory houses a Python-based Basic Model Interface (BMI) wrapper that co
   * NextGen hydrofabric
 * **Integrated Preprocessing**: Automatically handles forcing file extraction and ESMF mesh generation directly as a preprocessing workflow before Forcing Engine execution
 
-> **Documentation & Setup**: Setup, installation, and execution examples are further detailed in the `README.md` file within the directory as well as its dedicated Wiki Pages subsection.
+> **Documentation & Setup**: Setup, installation, and execution examples are further detailed in the `README.md` file within the directory.
